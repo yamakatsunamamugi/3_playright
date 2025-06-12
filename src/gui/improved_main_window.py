@@ -266,50 +266,49 @@ class ImprovedMainWindow:
         thread.start()
     
     def _analyze_spreadsheet_thread(self):
-        """スプレッドシート分析スレッド"""
+        """スプレッドシート分析スレッド（実際のGoogle Sheets API使用）"""
         try:
-            # シミュレーション: 実際にはGoogle Sheets APIを使用
-            import time
-            time.sleep(2)
+            from src.ai_tools.sheets_handler import SheetsHandler
             
-            # 模擬的な列構造
-            mock_columns = {
-                "A": "番号",
-                "B": "タイトル", 
-                "C": "コピー1",
-                "D": "処理状況1",
-                "E": "エラー1",
-                "F": "結果1",
-                "G": "コピー2",
-                "H": "処理状況2", 
-                "I": "エラー2",
-                "J": "結果2"
-            }
+            # Google Sheets認証と分析
+            sheets_handler = SheetsHandler()
             
-            # 「コピー」列を検出
+            if not sheets_handler.authenticate():
+                raise Exception("Google Sheets API認証に失敗しました")
+            
+            if not sheets_handler.set_spreadsheet(self.url_var.get(), self.sheet_var.get()):
+                raise Exception("スプレッドシート設定に失敗しました")
+            
+            # 実際のシート構造を分析
+            sheet_structure = sheets_handler.analyze_sheet_structure()
+            
+            # copy_columnsを更新
             copy_columns = []
-            for col, name in mock_columns.items():
-                if "コピー" in name:
-                    copy_columns.append({
-                        "column": col,
-                        "name": name,
-                        "index": ord(col) - ord('A')
-                    })
+            for col_info in sheet_structure['copy_columns']:
+                copy_columns.append({
+                    "column": col_info['column_letter'],
+                    "name": f"コピー列_{col_info['column_letter']}",
+                    "index": col_info['column_index'] - 1,
+                    "process_column": col_info['process_column'],
+                    "error_column": col_info['error_column'],
+                    "paste_column": col_info['paste_column']
+                })
             
             self.copy_columns = copy_columns
             
             # UIスレッドで結果を表示
-            self.root.after(0, self._show_analysis_result, mock_columns, copy_columns)
+            self.root.after(0, self._show_analysis_result, sheet_structure, copy_columns)
             
         except Exception as e:
             self.root.after(0, lambda: self.log(f"❌ 分析エラー: {e}"))
             self.root.after(0, lambda: self.status_var.set("分析エラー"))
             self.root.after(0, lambda: self.analyze_button.config(state="normal"))
     
-    def _show_analysis_result(self, columns, copy_columns):
+    def _show_analysis_result(self, sheet_structure, copy_columns):
         """分析結果を表示"""
         self.log(f"✅ スプレッドシート分析完了")
-        self.log(f"📊 検出された列: {len(columns)}個")
+        self.log(f"📊 コピー列: {sheet_structure['total_copy_columns']}個")
+        self.log(f"📋 処理対象行: {sheet_structure['total_target_rows']}行")
         
         if copy_columns:
             self.log(f"🎯 「コピー」列を検出: {len(copy_columns)}個")
@@ -644,15 +643,31 @@ class ImprovedMainWindow:
             self.root.after(0, self._reset_processing_state)
     
     async def _run_real_processing(self):
-        """実際のAI処理を実行"""
+        """実際のAI処理を実行（CLAUDE.md要件に基づく）"""
         from src.ai_tools.browser_manager import BrowserManager
-        from src.ai_tools.chatgpt_handler import ChatGPTHandler
-        from src.ai_tools.base_ai_handler import AIConfig
+        from src.ai_tools.sheets_handler import SheetsHandler
         
         browser_manager = None
+        sheets_handler = None
         
         try:
             self.root.after(0, lambda: self.log("🚀 実際のAI処理を開始"))
+            
+            # Google Sheets認証
+            self.root.after(0, lambda: self.log("📊 Google Sheets APIに接続中..."))
+            sheets_handler = SheetsHandler()
+            
+            if not sheets_handler.authenticate():
+                raise Exception("Google Sheets API認証に失敗しました")
+            
+            if not sheets_handler.set_spreadsheet(self.url_var.get(), self.sheet_var.get()):
+                raise Exception("スプレッドシート設定に失敗しました")
+            
+            # シート構造分析
+            self.root.after(0, lambda: self.log("🔍 シート構造を分析中..."))
+            sheet_structure = sheets_handler.analyze_sheet_structure()
+            
+            self.root.after(0, lambda: self.log(f"✅ 分析完了: {sheet_structure['total_copy_columns']}列, {sheet_structure['total_target_rows']}行"))
             
             # ブラウザマネージャーを初期化
             self.root.after(0, lambda: self.log("📋 ブラウザマネージャーを初期化中..."))
@@ -670,47 +685,365 @@ class ImprovedMainWindow:
             
             self.root.after(0, lambda: self.log("✅ ブラウザ起動成功"))
             
-            # 各列の処理
-            total_columns = len(self.copy_columns)
+            # 実際の処理開始
+            total_tasks = len(sheet_structure['copy_columns']) * len(sheet_structure['target_rows'])
+            completed_tasks = 0
             
-            for i, col_info in enumerate(self.copy_columns):
+            # 各コピー列の処理
+            for copy_column_info in sheet_structure['copy_columns']:
                 if not self.processing:
                     break
                 
-                col_name = col_info['name']
+                col_name = f"コピー列_{copy_column_info['column_letter']}"
                 config = self.column_ai_configs.get(col_name)
                 
-                if config:
-                    ai = config['ai_var'].get()
-                    model = config['model_var'].get()
+                if not config:
+                    self.root.after(0, lambda cn=col_name: self.log(f"⚠️ {cn}の設定が見つかりません"))
+                    continue
+                
+                ai = config['ai_var'].get()
+                model = config['model_var'].get()
+                
+                self.root.after(0, lambda cn=col_name, a=ai: self.log(f"🔄 {cn}を{a}で処理開始"))
+                
+                # 各行の処理
+                for row in sheet_structure['target_rows']:
+                    if not self.processing:
+                        break
                     
-                    self.root.after(0, lambda cn=col_name, a=ai, m=model: 
-                                  self.log(f"🔄 {cn}を{a}({m})で実際に処理中..."))
-                    
-                    # AIサイトにアクセスして実際の処理を実行
-                    success = await self._process_with_ai(browser_manager, ai, col_name, model)
-                    
-                    # プログレスバー更新
-                    progress = ((i + 1) / total_columns) * 100
-                    self.root.after(0, lambda p=progress: self.progress_var.set(p))
-                    
-                    self.root.after(0, lambda cn=col_name: self.log(f"✅ {cn}の実際の処理完了"))
+                    try:
+                        # 処理状況をチェック
+                        process_status = sheets_handler.get_process_status(copy_column_info, row)
+                        
+                        if process_status not in ['', '未処理']:
+                            self.root.after(0, lambda r=row: self.log(f"⏭️ 行{r}は既に処理済み（{process_status}）"))
+                            completed_tasks += 1
+                            continue
+                        
+                        # 処理中に変更
+                        sheets_handler.set_process_status(copy_column_info, row, "処理中")
+                        
+                        # コピー列からテキストを取得
+                        copy_text = sheets_handler.get_copy_text(copy_column_info, row)
+                        
+                        if not copy_text.strip():
+                            self.root.after(0, lambda r=row: self.log(f"⚠️ 行{r}のコピー列が空です"))
+                            sheets_handler.set_process_status(copy_column_info, row, "未処理")
+                            completed_tasks += 1
+                            continue
+                        
+                        self.root.after(0, lambda r=row, t=copy_text[:30]: self.log(f"📝 行{r}処理中: {t}..."))
+                        
+                        # AIで処理
+                        ai_result = await self._process_single_text_with_ai(
+                            browser_manager, ai, copy_text, model
+                        )
+                        
+                        if ai_result:
+                            # 結果を貼り付け列に書き込み
+                            sheets_handler.set_paste_result(copy_column_info, row, ai_result)
+                            sheets_handler.set_process_status(copy_column_info, row, "処理済み")
+                            sheets_handler.set_error_message(copy_column_info, row, "")  # エラーをクリア
+                            
+                            self.root.after(0, lambda r=row: self.log(f"✅ 行{r}処理完了"))
+                        else:
+                            # エラー処理
+                            error_msg = "AI処理に失敗しました"
+                            sheets_handler.set_error_message(copy_column_info, row, error_msg)
+                            sheets_handler.set_process_status(copy_column_info, row, "未処理")
+                            
+                            self.root.after(0, lambda r=row: self.log(f"❌ 行{r}処理失敗"))
+                        
+                        completed_tasks += 1
+                        
+                        # プログレスバー更新
+                        progress = (completed_tasks / total_tasks) * 100
+                        self.root.after(0, lambda p=progress: self.progress_var.set(p))
+                        
+                    except Exception as e:
+                        # エラー処理
+                        error_msg = f"処理エラー: {str(e)}"
+                        sheets_handler.set_error_message(copy_column_info, row, error_msg)
+                        sheets_handler.set_process_status(copy_column_info, row, "未処理")
+                        
+                        self.root.after(0, lambda r=row, err=str(e): self.log(f"❌ 行{r}エラー: {err}"))
+                        completed_tasks += 1
             
             if self.processing:
-                self.root.after(0, lambda: self.log("🎉 全ての実際の処理が完了しました"))
+                self.root.after(0, lambda: self.log("🎉 全ての処理が完了しました"))
                 
         except Exception as e:
             import traceback
             error_details = traceback.format_exc()
-            self.root.after(0, lambda: self.log(f"❌ AI処理エラー: {str(e)}"))
+            self.root.after(0, lambda: self.log(f"❌ 処理エラー: {str(e)}"))
             self.root.after(0, lambda: self.log(f"🔍 詳細エラー: {error_details}"))
             raise
         finally:
-            # ブラウザのクリーンアップ
+            # リソースのクリーンアップ
             if browser_manager:
-                await browser_manager.cleanup()
-                self.root.after(0, lambda: self.log("🧹 ブラウザをクリーンアップしました"))
+                # ブラウザは接続テスト時と同様に開いたままにする
+                self.root.after(0, lambda: self.log("🌐 ブラウザは開いたままにします（手動で操作可能）"))
     
+    async def _process_single_text_with_ai(self, browser_manager, ai_name: str, text: str, model: str) -> Optional[str]:
+        """
+        単一テキストをAIで処理
+        
+        Args:
+            browser_manager: ブラウザマネージャー
+            ai_name: AI名
+            text: 処理するテキスト
+            model: 使用モデル
+            
+        Returns:
+            Optional[str]: AI処理結果（失敗時None）
+        """
+        try:
+            if ai_name == "ChatGPT":
+                return await self._process_text_with_chatgpt(browser_manager, text, model)
+            elif ai_name == "Claude":
+                return await self._process_text_with_claude(browser_manager, text, model)
+            elif ai_name == "Gemini":
+                return await self._process_text_with_gemini(browser_manager, text, model)
+            elif ai_name == "Genspark":
+                return await self._process_text_with_genspark(browser_manager, text, model)
+            elif ai_name == "Google AI Studio":
+                return await self._process_text_with_google_ai_studio(browser_manager, text, model)
+            else:
+                self.root.after(0, lambda: self.log(f"❌ 未対応のAI: {ai_name}"))
+                return None
+        except Exception as e:
+            self.root.after(0, lambda: self.log(f"❌ {ai_name}テキスト処理エラー: {str(e)}"))
+            return None
+    
+    async def _process_text_with_chatgpt(self, browser_manager, text: str, model: str) -> Optional[str]:
+        """ChatGPTでテキストを処理"""
+        try:
+            page = await browser_manager.create_page(f"chatgpt_process", "https://chat.openai.com")
+            
+            if not page:
+                return None
+            
+            await asyncio.sleep(3)
+            
+            # チャット入力欄を探す
+            chat_input = await page.query_selector('[data-testid="prompt-textarea"]')
+            if not chat_input:
+                return None
+            
+            # テキストを入力
+            await chat_input.fill(text)
+            await asyncio.sleep(1)
+            
+            # 送信
+            send_button = await page.query_selector('[data-testid="send-button"]')
+            if send_button:
+                await send_button.click()
+            else:
+                await page.keyboard.press('Enter')
+            
+            # 回答を待機（最大2分）
+            await asyncio.sleep(5)  # 初期待機
+            
+            # 回答完了を待機
+            for _ in range(24):  # 2分間待機
+                if not self.processing:
+                    return None
+                
+                # 送信ボタンが再び有効になったかチェック
+                send_button = await page.query_selector('[data-testid="send-button"]:not([disabled])')
+                if send_button:
+                    break
+                await asyncio.sleep(5)
+            
+            # 最新の回答を取得
+            response_elements = await page.query_selector_all('[data-message-author-role="assistant"]')
+            if response_elements:
+                last_response = response_elements[-1]
+                response_text = await last_response.inner_text()
+                return response_text.strip()
+            
+            return None
+            
+        except Exception as e:
+            self.root.after(0, lambda: self.log(f"❌ ChatGPTテキスト処理エラー: {str(e)}"))
+            return None
+    
+    async def _process_text_with_claude(self, browser_manager, text: str, model: str) -> Optional[str]:
+        """Claudeでテキストを処理"""
+        try:
+            page = await browser_manager.create_page(f"claude_process", "https://claude.ai")
+            
+            if not page:
+                return None
+            
+            await asyncio.sleep(3)
+            
+            # チャット入力欄を探す
+            chat_input = await page.query_selector('div[contenteditable="true"]')
+            if not chat_input:
+                return None
+            
+            # テキストを入力
+            await chat_input.fill(text)
+            await asyncio.sleep(1)
+            
+            # 送信
+            await page.keyboard.press('Enter')
+            
+            # 回答を待機
+            await asyncio.sleep(5)
+            
+            # 回答完了を待機
+            for _ in range(24):  # 2分間待機
+                if not self.processing:
+                    return None
+                
+                # 入力欄が再び有効になったかチェック
+                input_enabled = await page.query_selector('div[contenteditable="true"]:not([disabled])')
+                if input_enabled:
+                    break
+                await asyncio.sleep(5)
+            
+            # 最新の回答を取得
+            messages = await page.query_selector_all('[data-is-streaming="false"]')
+            if messages:
+                last_message = messages[-1]
+                response_text = await last_message.inner_text()
+                return response_text.strip()
+            
+            return None
+            
+        except Exception as e:
+            self.root.after(0, lambda: self.log(f"❌ Claudeテキスト処理エラー: {str(e)}"))
+            return None
+    
+    async def _process_text_with_gemini(self, browser_manager, text: str, model: str) -> Optional[str]:
+        """Geminiでテキストを処理"""
+        try:
+            page = await browser_manager.create_page(f"gemini_process", "https://gemini.google.com")
+            
+            if not page:
+                return None
+            
+            await asyncio.sleep(3)
+            
+            # チャット入力欄を探す
+            chat_input = await page.query_selector('rich-textarea textarea')
+            if not chat_input:
+                chat_input = await page.query_selector('textarea[placeholder*="Enter"]')
+            
+            if not chat_input:
+                return None
+            
+            # テキストを入力
+            await chat_input.fill(text)
+            await asyncio.sleep(1)
+            
+            # 送信
+            send_button = await page.query_selector('button[aria-label*="Send"]')
+            if send_button:
+                await send_button.click()
+            else:
+                await page.keyboard.press('Enter')
+            
+            # 回答を待機
+            await asyncio.sleep(10)
+            
+            # 回答を取得
+            response_elements = await page.query_selector_all('[data-response-id]')
+            if response_elements:
+                last_response = response_elements[-1]
+                response_text = await last_response.inner_text()
+                return response_text.strip()
+            
+            return None
+            
+        except Exception as e:
+            self.root.after(0, lambda: self.log(f"❌ Geminiテキスト処理エラー: {str(e)}"))
+            return None
+    
+    async def _process_text_with_genspark(self, browser_manager, text: str, model: str) -> Optional[str]:
+        """Gensparkでテキストを処理"""
+        try:
+            page = await browser_manager.create_page(f"genspark_process", "https://www.genspark.ai")
+            
+            if not page:
+                return None
+            
+            await asyncio.sleep(3)
+            
+            # チャット入力欄を探す
+            chat_input = await page.query_selector('textarea[placeholder*="Ask"]')
+            if not chat_input:
+                chat_input = await page.query_selector('input[type="text"]')
+            
+            if not chat_input:
+                return None
+            
+            # テキストを入力
+            await chat_input.fill(text)
+            await asyncio.sleep(1)
+            
+            # 送信
+            await page.keyboard.press('Enter')
+            
+            # 回答を待機
+            await asyncio.sleep(15)
+            
+            # 回答を取得（Gensparkの具体的なセレクターは要調整）
+            response_elements = await page.query_selector_all('.response-content')
+            if response_elements:
+                last_response = response_elements[-1]
+                response_text = await last_response.inner_text()
+                return response_text.strip()
+            
+            return None
+            
+        except Exception as e:
+            self.root.after(0, lambda: self.log(f"❌ Gensparkテキスト処理エラー: {str(e)}"))
+            return None
+    
+    async def _process_text_with_google_ai_studio(self, browser_manager, text: str, model: str) -> Optional[str]:
+        """Google AI Studioでテキストを処理"""
+        try:
+            page = await browser_manager.create_page(f"google_ai_studio_process", "https://aistudio.google.com")
+            
+            if not page:
+                return None
+            
+            await asyncio.sleep(3)
+            
+            # チャット入力欄を探す
+            chat_input = await page.query_selector('textarea[placeholder*="Enter"]')
+            if not chat_input:
+                chat_input = await page.query_selector('div[contenteditable="true"]')
+            
+            if not chat_input:
+                return None
+            
+            # テキストを入力
+            await chat_input.fill(text)
+            await asyncio.sleep(1)
+            
+            # 送信
+            await page.keyboard.press('Enter')
+            
+            # 回答を待機
+            await asyncio.sleep(10)
+            
+            # 回答を取得（Google AI Studioの具体的なセレクターは要調整）
+            response_elements = await page.query_selector_all('.response-container')
+            if response_elements:
+                last_response = response_elements[-1]
+                response_text = await last_response.inner_text()
+                return response_text.strip()
+            
+            return None
+            
+        except Exception as e:
+            self.root.after(0, lambda: self.log(f"❌ Google AI Studioテキスト処理エラー: {str(e)}"))
+            return None
+
     async def _process_with_ai(self, browser_manager, ai_name, col_name, model):
         """指定されたAIで実際の処理を実行"""
         try:
