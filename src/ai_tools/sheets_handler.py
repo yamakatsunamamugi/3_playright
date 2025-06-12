@@ -184,6 +184,72 @@ class SheetsHandler:
             return False
     
     @retry_on_api_error(max_retries=3)
+    def get_sheet_names(self) -> List[str]:
+        """
+        スプレッドシート内の全シート名を取得
+        
+        Returns:
+            List[str]: シート名のリスト
+        """
+        try:
+            logger.info("📋 シート名一覧を取得中...")
+            
+            if not self.service or not self.spreadsheet_id:
+                raise ValueError("スプレッドシートが設定されていません")
+            
+            # スプレッドシートのメタデータを取得
+            spreadsheet = self.service.spreadsheets().get(
+                spreadsheetId=self.spreadsheet_id
+            ).execute()
+            
+            # シート名を抽出
+            sheet_names = []
+            sheets = spreadsheet.get('sheets', [])
+            
+            for sheet in sheets:
+                sheet_properties = sheet.get('properties', {})
+                sheet_name = sheet_properties.get('title', '')
+                if sheet_name:
+                    sheet_names.append(sheet_name)
+            
+            logger.info(f"✅ シート名取得完了: {len(sheet_names)}個のシート")
+            for name in sheet_names:
+                logger.info(f"   📄 {name}")
+            
+            return sheet_names
+            
+        except Exception as e:
+            logger.error(f"❌ シート名取得エラー: {e}")
+            raise
+    
+    @retry_on_api_error(max_retries=3)
+    def verify_sheet_exists(self, sheet_name: str) -> bool:
+        """
+        指定されたシート名が存在するかチェック
+        
+        Args:
+            sheet_name: チェックするシート名
+            
+        Returns:
+            bool: シートが存在する場合True
+        """
+        try:
+            sheet_names = self.get_sheet_names()
+            exists = sheet_name in sheet_names
+            
+            if exists:
+                logger.info(f"✅ シート確認完了: '{sheet_name}' が存在します")
+            else:
+                logger.warning(f"⚠️ シートが見つかりません: '{sheet_name}'")
+                logger.info(f"利用可能なシート: {', '.join(sheet_names)}")
+            
+            return exists
+            
+        except Exception as e:
+            logger.error(f"❌ シート存在確認エラー: {e}")
+            return False
+
+    @retry_on_api_error(max_retries=3)
     def analyze_sheet_structure(self) -> Dict[str, Any]:
         """
         シート構造を分析（CLAUDE.md要件に基づく）
@@ -203,21 +269,31 @@ class SheetsHandler:
             
             work_row_values = work_row_result.get('values', [[]])[0] if work_row_result.get('values') else []
             
-            # 「コピー」列を検索
+            # 「コピー」列を検索（より柔軟な検索）
             copy_columns = []
             for col_index, cell_value in enumerate(work_row_values):
-                if str(cell_value).strip() == "コピー":
+                cell_str = str(cell_value).strip().lower()
+                # 「コピー」「copy」「コピー列」など様々なパターンに対応
+                if any(keyword in cell_str for keyword in ['コピー', 'copy', 'ｺﾋﾟｰ']):
                     col_letter = self._column_index_to_letter(col_index + 1)
                     copy_columns.append({
                         'column_letter': col_letter,
                         'column_index': col_index + 1,
-                        'process_column': col_index - 1,  # コピー列-2
-                        'error_column': col_index,        # コピー列-1
-                        'paste_column': col_index + 2     # コピー列+1
+                        'process_column': max(1, col_index - 1),  # コピー列-2 (最小1列目)
+                        'error_column': max(1, col_index),        # コピー列-1 (最小1列目)
+                        'paste_column': col_index + 2             # コピー列+1
                     })
+                    logger.info(f"🎯 コピー列を検出: {col_letter}列 '{cell_value}'")
             
             if not copy_columns:
-                raise ValueError("「コピー」列が見つかりません")
+                # より詳細なエラー情報を提供
+                logger.warning("⚠️ 「コピー」列が見つかりません")
+                logger.info("📋 作業指示行の内容:")
+                for i, value in enumerate(work_row_values):
+                    col_letter = self._column_index_to_letter(i + 1)
+                    logger.info(f"   {col_letter}列: '{value}'")
+                logger.info("💡 「コピー」「copy」「コピー列」などの文字列を含む列を作成してください")
+                raise ValueError("「コピー」列が見つかりません。作業指示行に「コピー」列を作成してください。")
             
             # A列の処理対象行を検索
             a_column_range = f"{self.sheet_name}!A:A"

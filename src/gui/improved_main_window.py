@@ -136,7 +136,7 @@ class ImprovedMainWindow:
         
         # URL入力
         ttk.Label(ss_frame, text="スプレッドシートURL:").grid(row=0, column=0, sticky="w", pady=2)
-        self.url_var = tk.StringVar(value="https://docs.google.com/spreadsheets/d/1mhvJKjNNdFqn_xo1D7iZzEyoLm9_2Qh3TbcV8NrW5Sx")
+        self.url_var = tk.StringVar(value="https://docs.google.com/spreadsheets/d/1C5aOSyyCBXf7HwF-BGGu-cz5jdRwNBaoW4G4ivIRrRg/edit?gid=1633283608#gid=1633283608")
         url_entry = ttk.Entry(ss_frame, textvariable=self.url_var, width=80)
         url_entry.grid(row=0, column=1, columnspan=2, sticky="ew", padx=(10, 0), pady=2)
         
@@ -147,14 +147,24 @@ class ImprovedMainWindow:
         self.sheet_combo['values'] = ["1.原稿本文作成", "2.データ集計", "3.分析結果"]
         self.sheet_combo.grid(row=1, column=1, sticky="w", padx=(10, 0), pady=2)
         
+        # シート名取得ボタン
+        self.get_sheets_button = ttk.Button(
+            ss_frame, 
+            text="📋 シート名取得", 
+            command=self._get_sheet_names,
+            width=15
+        )
+        self.get_sheets_button.grid(row=1, column=2, sticky="w", padx=(10, 0), pady=2)
+        
         # 分析ボタン
         self.analyze_button = ttk.Button(
             ss_frame, 
-            text="📋 スプレッドシート分析", 
+            text="🔍 スプレッドシート分析", 
             command=self._analyze_spreadsheet,
-            width=20
+            width=20,
+            state="disabled"  # 初期は無効
         )
-        self.analyze_button.grid(row=1, column=2, sticky="w", padx=(10, 0), pady=2)
+        self.analyze_button.grid(row=1, column=3, sticky="w", padx=(10, 0), pady=2)
         
         # グリッド設定
         ss_frame.columnconfigure(1, weight=1)
@@ -249,11 +259,83 @@ class ImprovedMainWindow:
         self.log("💡 テスト用設定が読み込まれています")
         self.log(f"📊 スプレッドシートURL: {self.url_var.get()}")
         self.log(f"📋 シート名: {self.sheet_var.get()}")
-        self.log("🔍 「スプレッドシート分析」ボタンをクリックして開始してください")
+        self.log("📋 まず「シート名取得」ボタンをクリックしてシートを選択してください")
     
+    def _get_sheet_names(self):
+        """シート名を取得してドロップダウンを更新"""
+        if self.processing:
+            return
+        
+        if not self.url_var.get().strip():
+            messagebox.showwarning("警告", "スプレッドシートURLを入力してください")
+            return
+        
+        self.log("📋 シート名を取得中...")
+        self.get_sheets_button.config(state="disabled")
+        
+        # 非同期でシート名取得を実行
+        thread = threading.Thread(target=self._get_sheet_names_thread)
+        thread.daemon = True
+        thread.start()
+    
+    def _get_sheet_names_thread(self):
+        """シート名取得スレッド"""
+        try:
+            from src.ai_tools.sheets_handler import SheetsHandler
+            
+            # Google Sheets認証
+            sheets_handler = SheetsHandler()
+            
+            if not sheets_handler.authenticate():
+                raise Exception("Google Sheets API認証に失敗しました")
+            
+            if not sheets_handler.set_spreadsheet(self.url_var.get(), ""):
+                raise Exception("スプレッドシート設定に失敗しました")
+            
+            # シート名を取得
+            sheet_names = sheets_handler.get_sheet_names()
+            
+            if not sheet_names:
+                raise Exception("シートが見つかりませんでした")
+            
+            # UIスレッドで結果を表示
+            self.root.after(0, self._show_sheet_names_result, sheet_names)
+            
+        except Exception as e:
+            self.root.after(0, lambda: self.log(f"❌ シート名取得エラー: {e}"))
+            self.root.after(0, lambda: self.get_sheets_button.config(state="normal"))
+    
+    def _show_sheet_names_result(self, sheet_names):
+        """シート名取得結果を表示"""
+        self.log(f"✅ シート名取得完了: {len(sheet_names)}個のシート")
+        for name in sheet_names:
+            self.log(f"   📄 {name}")
+        
+        # ドロップダウンを更新
+        self.sheet_combo['values'] = sheet_names
+        
+        # 最初のシートを選択
+        if sheet_names:
+            self.sheet_var.set(sheet_names[0])
+            self.log(f"📌 デフォルトシート選択: {sheet_names[0]}")
+        
+        # 分析ボタンを有効化
+        self.analyze_button.config(state="normal")
+        self.get_sheets_button.config(state="normal")
+        
+        self.log("🔍 シートを選択して「スプレッドシート分析」ボタンをクリックしてください")
+
     def _analyze_spreadsheet(self):
         """スプレッドシート分析を実行"""
         if self.processing:
+            return
+        
+        if not self.url_var.get().strip():
+            messagebox.showwarning("警告", "スプレッドシートURLを入力してください")
+            return
+        
+        if not self.sheet_var.get().strip():
+            messagebox.showwarning("警告", "シート名を選択してください")
             return
         
         self.log("🔍 スプレッドシート分析を開始...")
