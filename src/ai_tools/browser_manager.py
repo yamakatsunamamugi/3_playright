@@ -2,7 +2,10 @@
 
 import os
 import logging
-from typing import Optional, Dict, Any
+import platform
+import json
+from pathlib import Path
+from typing import Optional, Dict, Any, List
 from playwright.async_api import async_playwright, Browser, BrowserContext, Page
 
 
@@ -13,42 +16,95 @@ class BrowserManager:
     セッションを維持する機能を提供する。
     """
     
-    def __init__(self):
-        """初期化"""
+    def __init__(self, use_profile: Optional[str] = None):
+        """初期化
+        
+        Args:
+            use_profile: 使用するChromeプロファイル名（Noneでデフォルト）
+        """
         self.playwright = None
         self.browser: Optional[Browser] = None
         self.context: Optional[BrowserContext] = None
         self.pages: Dict[str, Page] = {}
         self.logger = logging.getLogger("BrowserManager")
         
-        # Chrome プロファイルのデフォルトパス
-        self.chrome_profile_path = self._get_default_chrome_profile_path()
+        # Chrome プロファイル設定
+        self.profile_name = use_profile or "Default"
+        self.chrome_user_data_dir = self._get_chrome_user_data_dir()
+        self.chrome_profile_path = os.path.join(self.chrome_user_data_dir, self.profile_name)
         
-    def _get_default_chrome_profile_path(self) -> str:
-        """デフォルトのChromeプロファイルパスを取得
+        # 利用可能なプロファイル一覧を取得
+        self.available_profiles = self._get_available_profiles()
+        
+    def _get_chrome_user_data_dir(self) -> str:
+        """ChromeのUser Dataディレクトリパスを取得
         
         Returns:
-            str: Chromeプロファイルのパス
+            str: Chrome User Dataディレクトリのパス
         """
-        import platform
         system = platform.system()
         
         if system == "Darwin":  # macOS
             home = os.path.expanduser("~")
-            return f"{home}/Library/Application Support/Google/Chrome/Default"
+            return os.path.join(home, "Library", "Application Support", "Google", "Chrome")
         elif system == "Windows":
-            user_data = os.environ.get("LOCALAPPDATA", "")
-            return f"{user_data}\\Google\\Chrome\\User Data\\Default"
+            local_app_data = os.environ.get("LOCALAPPDATA", "")
+            return os.path.join(local_app_data, "Google", "Chrome", "User Data")
         else:  # Linux
             home = os.path.expanduser("~")
-            return f"{home}/.config/google-chrome/Default"
+            return os.path.join(home, ".config", "google-chrome")
+    
+    def _get_available_profiles(self) -> List[str]:
+        """利用可能なChromeプロファイル一覧を取得
+        
+        Returns:
+            List[str]: プロファイル名のリスト
+        """
+        profiles = []
+        
+        if not os.path.exists(self.chrome_user_data_dir):
+            self.logger.warning(f"Chrome User Dataディレクトリが見つかりません: {self.chrome_user_data_dir}")
+            return profiles
+        
+        # Local Stateファイルからプロファイル情報を読み取る
+        local_state_path = os.path.join(self.chrome_user_data_dir, "Local State")
+        if os.path.exists(local_state_path):
+            try:
+                with open(local_state_path, 'r', encoding='utf-8') as f:
+                    local_state = json.load(f)
+                
+                # プロファイル情報を取得
+                profile_info = local_state.get('profile', {}).get('info_cache', {})
+                for profile_dir, info in profile_info.items():
+                    profile_name = info.get('name', profile_dir)
+                    profiles.append({
+                        'dir': profile_dir,
+                        'name': profile_name,
+                        'gaia_name': info.get('gaia_name', ''),
+                        'user_name': info.get('user_name', '')
+                    })
+            except Exception as e:
+                self.logger.error(f"プロファイル情報の読み取りエラー: {e}")
+        
+        # デフォルトプロファイルを追加
+        if os.path.exists(os.path.join(self.chrome_user_data_dir, "Default")):
+            profiles.insert(0, {
+                'dir': 'Default',
+                'name': 'デフォルト',
+                'gaia_name': '',
+                'user_name': ''
+            })
+        
+        return profiles
 
-    async def start_browser(self, headless: bool = False, use_existing_profile: bool = True) -> bool:
+    async def start_browser(self, headless: bool = False, use_existing_profile: bool = True, 
+                          profile_dir: Optional[str] = None) -> bool:
         """ブラウザを起動
         
         Args:
             headless (bool): ヘッドレスモードで起動するか
             use_existing_profile (bool): 既存のChromeプロファイルを使用するか
+            profile_dir (str): 使用するプロファイルディレクトリ（Noneで現在の設定を使用）
             
         Returns:
             bool: 起動成功時True
@@ -56,20 +112,65 @@ class BrowserManager:
         try:
             self.playwright = await async_playwright().start()
             
-            if use_existing_profile and os.path.exists(self.chrome_profile_path):
+            # プロファイルディレクトリの決定
+            if profile_dir:
+                target_profile_dir = os.path.join(self.chrome_user_data_dir, profile_dir)
+            else:
+                target_profile_dir = self.chrome_profile_path
+            
+            if use_existing_profile and os.path.exists(target_profile_dir):
                 # 既存のChromeプロファイルを使用
-                self.logger.info(f"既存のChromeプロファイルを使用: {self.chrome_profile_path}")
-                self.context = await self.playwright.chromium.launch_persistent_context(
-                    user_data_dir=os.path.dirname(self.chrome_profile_path),
+                self.logger.info(f"既存のChromeプロファイルを使用: {target_profile_dir}")
+                
+                # 一時的なユーザーデータディレクトリを作成（元のプロファイルを保護）
+                import tempfile
+                import shutil
+                
+                temp_dir = tempfile.mkdtemp(prefix="chrome_temp_")
+                temp_profile_dir = os.path.join(temp_dir, os.path.basename(target_profile_dir))
+                
+                # 必要なファイルのみコピー（Cookie、LocalStorage等）
+                important_files = [
+                    'Cookies', 'Cookies-journal',
+                    'Local Storage', 'Session Storage',
+                    'Web Data', 'Login Data',
+                    'Preferences'
+                ]
+                
+                os.makedirs(temp_profile_dir, exist_ok=True)
+                for file_name in important_files:
+                    src = os.path.join(target_profile_dir, file_name)
+                    dst = os.path.join(temp_profile_dir, file_name)
+                    if os.path.exists(src):
+                        if os.path.isdir(src):
+                            shutil.copytree(src, dst, dirs_exist_ok=True)
+                        else:
+                            shutil.copy2(src, dst)
+                
+                # ブラウザ起動オプション
+                launch_args = [
+                    "--no-sandbox",
+                    "--disable-blink-features=AutomationControlled",
+                    "--disable-web-security",
+                    "--disable-features=IsolateOrigins,site-per-process",
+                    "--disable-dev-shm-usage",
+                    f"--user-data-dir={temp_dir}",
+                    f"--profile-directory={os.path.basename(temp_profile_dir)}"
+                ]
+                
+                self.browser = await self.playwright.chromium.launch(
                     headless=headless,
-                    args=[
-                        "--no-sandbox",
-                        "--disable-blink-features=AutomationControlled",
-                        "--disable-extensions-except",
-                        "--disable-extensions",
-                    ]
+                    args=launch_args,
+                    ignore_default_args=["--enable-automation"]
                 )
-                self.browser = self.context.browser
+                self.context = await self.browser.new_context(
+                    viewport={'width': 1280, 'height': 720},
+                    user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                )
+                
+                # 一時ディレクトリのパスを保存（クリーンアップ用）
+                self.temp_dir = temp_dir
+                
             else:
                 # 新しいブラウザインスタンスを作成
                 self.logger.info("新しいブラウザインスタンスを作成")
@@ -78,20 +179,29 @@ class BrowserManager:
                     args=[
                         "--no-sandbox",
                         "--disable-blink-features=AutomationControlled",
-                    ]
+                        "--disable-dev-shm-usage"
+                    ],
+                    ignore_default_args=["--enable-automation"]
                 )
-                self.context = await self.browser.new_context()
-                
-            # User-Agentを設定してbot検出を回避
-            await self.context.set_extra_http_headers({
-                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            })
+                self.context = await self.browser.new_context(
+                    viewport={'width': 1280, 'height': 720},
+                    user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                )
+            
+            # JavaScript実行でNavigator.webdriverを削除
+            await self.context.add_init_script("""
+                Object.defineProperty(navigator, 'webdriver', {
+                    get: () => undefined
+                });
+            """)
             
             self.logger.info("ブラウザ起動完了")
             return True
             
         except Exception as e:
             self.logger.error(f"ブラウザ起動エラー: {e}")
+            import traceback
+            self.logger.error(traceback.format_exc())
             return False
 
     async def create_page(self, page_name: str, url: str = None) -> Optional[Page]:
@@ -246,6 +356,15 @@ class BrowserManager:
                 await self.browser.close()
             if self.playwright:
                 await self.playwright.stop()
+            
+            # 一時ディレクトリを削除
+            if hasattr(self, 'temp_dir') and os.path.exists(self.temp_dir):
+                import shutil
+                try:
+                    shutil.rmtree(self.temp_dir)
+                    self.logger.info(f"一時ディレクトリを削除: {self.temp_dir}")
+                except Exception as e:
+                    self.logger.warning(f"一時ディレクトリ削除エラー: {e}")
                 
             self.logger.info("ブラウザマネージャーのクリーンアップ完了")
             
@@ -262,5 +381,47 @@ class BrowserManager:
             "browser_running": self.browser is not None,
             "context_available": self.context is not None,
             "active_pages": list(self.pages.keys()),
-            "chrome_profile_path": self.chrome_profile_path
+            "chrome_user_data_dir": self.chrome_user_data_dir,
+            "chrome_profile_path": self.chrome_profile_path,
+            "current_profile": self.profile_name,
+            "available_profiles": self.available_profiles
         }
+    
+    def get_available_profiles_info(self) -> List[Dict[str, str]]:
+        """利用可能なプロファイル情報を取得
+        
+        Returns:
+            List[Dict[str, str]]: プロファイル情報のリスト
+        """
+        return self.available_profiles
+    
+    async def check_login_status(self, url: str, login_indicator: str) -> bool:
+        """指定したURLでログイン状態を確認
+        
+        Args:
+            url (str): 確認するURL
+            login_indicator (str): ログイン状態を示すセレクターまたはテキスト
+            
+        Returns:
+            bool: ログイン済みの場合True
+        """
+        try:
+            # 一時的なページを作成
+            page = await self.context.new_page()
+            await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            
+            # ログインインジケーターを確認
+            try:
+                # セレクターとして試す
+                await page.wait_for_selector(login_indicator, timeout=5000)
+                is_logged_in = True
+            except:
+                # テキストとして試す
+                is_logged_in = login_indicator in await page.content()
+            
+            await page.close()
+            return is_logged_in
+            
+        except Exception as e:
+            self.logger.error(f"ログイン状態確認エラー: {e}")
+            return False
