@@ -36,9 +36,9 @@ def main():
             from src.gui.enhanced_main_window import EnhancedMainWindow
             app = EnhancedMainWindow()
         else:
-            # 修正版メインウィンドウを使用
-            from fixed_main_window import FixedMainWindow
-            app = FixedMainWindow()
+            # 改良版メインウィンドウを使用（実際のブラウザテスト付き）
+            from src.gui.improved_main_window import ImprovedMainWindow
+            app = ImprovedMainWindow()
             
         print("✓ アプリケーション起動")
         
