@@ -134,29 +134,29 @@ class ImprovedMainWindow:
         ss_frame = ttk.LabelFrame(self.main_frame, text="📊 スプレッドシート設定", padding="10")
         ss_frame.pack(fill="x", pady=(0, 10))
         
-        # URL入力
+        # URL入力（横幅を60に縮小）
         ttk.Label(ss_frame, text="スプレッドシートURL:").grid(row=0, column=0, sticky="w", pady=2)
         self.url_var = tk.StringVar(value="https://docs.google.com/spreadsheets/d/1C5aOSyyCBXf7HwF-BGGu-cz5jdRwNBaoW4G4ivIRrRg/edit?gid=1633283608#gid=1633283608")
-        url_entry = ttk.Entry(ss_frame, textvariable=self.url_var, width=80)
-        url_entry.grid(row=0, column=1, columnspan=2, sticky="ew", padx=(10, 0), pady=2)
+        url_entry = ttk.Entry(ss_frame, textvariable=self.url_var, width=60)
+        url_entry.grid(row=0, column=1, sticky="ew", padx=(10, 0), pady=2)
         
-        # シート名選択
-        ttk.Label(ss_frame, text="シート名:").grid(row=1, column=0, sticky="w", pady=2)
-        self.sheet_var = tk.StringVar(value="1.原稿本文作成")
-        self.sheet_combo = ttk.Combobox(ss_frame, textvariable=self.sheet_var, width=30)
-        self.sheet_combo['values'] = ["1.原稿本文作成", "2.データ集計", "3.分析結果"]
-        self.sheet_combo.grid(row=1, column=1, sticky="w", padx=(10, 0), pady=2)
-        
-        # シート名取得ボタン
+        # シート名取得ボタン（URL欄の右隣）
         self.get_sheets_button = ttk.Button(
             ss_frame, 
             text="📋 シート名取得", 
             command=self._get_sheet_names,
             width=15
         )
-        self.get_sheets_button.grid(row=1, column=2, sticky="w", padx=(10, 0), pady=2)
+        self.get_sheets_button.grid(row=0, column=2, sticky="w", padx=(10, 0), pady=2)
         
-        # 分析ボタン
+        # シート名選択（2行目）
+        ttk.Label(ss_frame, text="シート名:").grid(row=1, column=0, sticky="w", pady=2)
+        self.sheet_var = tk.StringVar(value="1.原稿本文作成")
+        self.sheet_combo = ttk.Combobox(ss_frame, textvariable=self.sheet_var, width=30)
+        self.sheet_combo['values'] = ["1.原稿本文作成", "2.データ集計", "3.分析結果"]
+        self.sheet_combo.grid(row=1, column=1, sticky="w", padx=(10, 0), pady=2)
+        
+        # 分析ボタン（シート名の右隣）
         self.analyze_button = ttk.Button(
             ss_frame, 
             text="🔍 スプレッドシート分析", 
@@ -164,7 +164,7 @@ class ImprovedMainWindow:
             width=20,
             state="disabled"  # 初期は無効
         )
-        self.analyze_button.grid(row=1, column=3, sticky="w", padx=(10, 0), pady=2)
+        self.analyze_button.grid(row=1, column=2, sticky="w", padx=(10, 0), pady=2)
         
         # グリッド設定
         ss_frame.columnconfigure(1, weight=1)

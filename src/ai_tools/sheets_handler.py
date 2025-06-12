@@ -53,7 +53,7 @@ class SheetsHandler:
         self.service = None
         self.spreadsheet_id = None
         self.sheet_name = None
-        self.work_instruction_row = 5  # CLAUDE.md要件：5行目が作業指示行
+        self.work_instruction_row = None  # 動的に検索して設定
         
         logger.info(f"📊 SheetsHandler を初期化しました (認証ファイル: {self.credentials_path})")
     
@@ -249,6 +249,68 @@ class SheetsHandler:
             logger.error(f"❌ シート存在確認エラー: {e}")
             return False
 
+    def find_work_instruction_row(self) -> int:
+        """
+        A列の1～10行目を検索して「作業指示行」を見つける
+        
+        Returns:
+            int: 作業指示行の行番号（1-based）
+        """
+        try:
+            logger.info("🔍 作業指示行を検索中...")
+            
+            # A1:A10を検索
+            range_name = f"{self.sheet_name}!A1:A10"
+            result = self.service.spreadsheets().values().get(
+                spreadsheetId=self.spreadsheet_id,
+                range=range_name
+            ).execute()
+            
+            values = result.get('values', [])
+            for row_index, row_data in enumerate(values, start=1):
+                if row_data and "作業指示行" in str(row_data[0]):
+                    logger.info(f"✅ 作業指示行を検出: {row_index}行目")
+                    return row_index
+            
+            # 見つからない場合はエラー
+            logger.error("❌ A列1～10行目に「作業指示行」が見つかりません")
+            raise ValueError("A列1～10行目に「作業指示行」が見つかりません")
+            
+        except Exception as e:
+            logger.error(f"❌ 作業指示行検索エラー: {e}")
+            raise
+    
+    def find_data_start_row(self) -> int:
+        """
+        A列で数字「1」を検索してデータ開始行を見つける
+        
+        Returns:
+            int: データ開始行の行番号（1-based）
+        """
+        try:
+            logger.info("🔍 データ開始行を検索中...")
+            
+            if not self.work_instruction_row:
+                raise ValueError("作業指示行が設定されていません")
+            
+            # 作業指示行の次の行から最大50行まで検索
+            start_row = self.work_instruction_row + 1
+            end_row = min(start_row + 50, 100)
+            
+            for row_index in range(start_row, end_row):
+                cell_value = self.read_cell_value(row_index, 1)  # A列
+                if cell_value == "1":
+                    logger.info(f"✅ データ開始行を検出: {row_index}行目")
+                    return row_index
+            
+            # 見つからない場合はエラー
+            logger.error("❌ A列に「1」が見つかりません")
+            raise ValueError("A列に「1」が見つかりません（処理対象データなし）")
+            
+        except Exception as e:
+            logger.error(f"❌ データ開始行検索エラー: {e}")
+            raise
+
     @retry_on_api_error(max_retries=3)
     def analyze_sheet_structure(self) -> Dict[str, Any]:
         """
@@ -260,7 +322,10 @@ class SheetsHandler:
         try:
             logger.info("🔍 シート構造を分析中...")
             
-            # 作業指示行（5行目）を読み取り
+            # 作業指示行を動的に検索
+            self.work_instruction_row = self.find_work_instruction_row()
+            
+            # 作業指示行を読み取り
             work_row_range = f"{self.sheet_name}!{self.work_instruction_row}:{self.work_instruction_row}"
             work_row_result = self.service.spreadsheets().values().get(
                 spreadsheetId=self.spreadsheet_id,
@@ -295,8 +360,11 @@ class SheetsHandler:
                 logger.info("💡 「コピー」「copy」「コピー列」などの文字列を含む列を作成してください")
                 raise ValueError("「コピー」列が見つかりません。作業指示行に「コピー」列を作成してください。")
             
-            # A列の処理対象行を検索
-            a_column_range = f"{self.sheet_name}!A:A"
+            # データ開始行を検索
+            data_start_row = self.find_data_start_row()
+            
+            # A列の処理対象行を検索（データ開始行から）
+            a_column_range = f"{self.sheet_name}!A{data_start_row}:A"
             a_column_result = self.service.spreadsheets().values().get(
                 spreadsheetId=self.spreadsheet_id,
                 range=a_column_range
@@ -304,11 +372,14 @@ class SheetsHandler:
             
             a_column_values = a_column_result.get('values', [])
             
-            # 数値が入っている行を特定
+            # 連続した数値が入っている行を特定
             target_rows = []
             for row_index, row_data in enumerate(a_column_values):
                 if row_data and str(row_data[0]).strip().isdigit():
-                    target_rows.append(row_index + 1)  # 1-based
+                    target_rows.append(data_start_row + row_index)  # 実際の行番号
+                else:
+                    # 空白セルまたは数値以外で終了
+                    break
             
             structure = {
                 'copy_columns': copy_columns,
