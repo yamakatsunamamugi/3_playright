@@ -29,8 +29,8 @@ class SpreadsheetWidget:
         self.on_sheet_selected = on_sheet_selected
         
         # 変数の初期化
-        self.url_var = tk.StringVar()
-        self.selected_sheet_var = tk.StringVar()
+        self.url_var = tk.StringVar(value="https://docs.google.com/spreadsheets/d/1C5aOSyyCBXf7HwF-BGGu-cz5jdRwNBaoW4G4ivIRrRg/edit")
+        self.selected_sheet_var = tk.StringVar(value="1.原稿本文作成")
         self.loading = False
         
         # ウィジェット作成

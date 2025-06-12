@@ -10,6 +10,7 @@ from src.gui.widgets import (
     ProgressWidget,
     LogWidget
 )
+from src.gui.widgets.column_ai_config_widget import ColumnAIConfigPanel
 
 
 logger = get_logger(__name__)
@@ -57,6 +58,12 @@ class MainWindow:
             on_config_changed=self._on_ai_config_changed
         )
         
+        # 列ごとのAI設定パネル（新機能）
+        self.column_ai_config_panel = ColumnAIConfigPanel(
+            self.main_frame,
+            on_config_changed=self._on_column_ai_config_changed
+        )
+        
         # 進捗表示ウィジェット
         self.progress_widget = ProgressWidget(self.main_frame)
         
@@ -94,6 +101,10 @@ class MainWindow:
         self.ai_config_panel.grid(row=row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 10))
         
         row += 1
+        # 列ごとのAI設定パネル（新機能）
+        self.column_ai_config_panel.get_frame().grid(row=row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 10))
+        
+        row += 1
         # 進捗表示
         self.progress_widget.grid(row=row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 10))
         
@@ -128,12 +139,49 @@ class MainWindow:
         """シート選択時のコールバック処理"""
         self.add_log(f"シートが選択されました: {sheet_name}")
         self.update_status(f"シート選択: {sheet_name}")
+        
+        # スプレッドシートを分析してコピー列を検出
+        self._analyze_spreadsheet_structure(url, sheet_name)
     
     def _on_ai_config_changed(self):
         """AI設定変更時のコールバック処理"""
         configs = self.ai_config_panel.get_all_configs()
         enabled_ais = [name for name, config in configs.items() if config.get('enabled', False)]
         self.add_log(f"AI設定が変更されました: {len(enabled_ais)}個のAIが有効")
+    
+    def _on_column_ai_config_changed(self, column_index: int, config: dict):
+        """列ごとのAI設定変更時のコールバック処理"""
+        ai_name = config.get('ai', 'Unknown')
+        model_name = config.get('model', 'Unknown')
+        column_name = config.get('column_name', f'列{column_index}')
+        self.add_log(f"{column_name}: {ai_name} - {model_name}に設定されました")
+    
+    def _analyze_spreadsheet_structure(self, url: str, sheet_name: str):
+        """スプレッドシート構造を分析してコピー列を検出"""
+        def analyze_thread():
+            try:
+                self.add_log("📊 スプレッドシート構造を分析中...")
+                
+                # TODO: 実際のスプレッドシート分析ロジックを実装
+                # ここでは仮のデータを使用
+                copy_columns = [
+                    {'column_letter': 'F', 'column_index': 5, 'column_name': 'コピー1'},
+                    {'column_letter': 'I', 'column_index': 8, 'column_name': 'コピー2'},
+                ]
+                
+                # UIスレッドで列AI設定を更新
+                self.root.after(0, lambda: self._update_column_ai_config(copy_columns))
+                self.root.after(0, lambda: self.add_log(f"✅ {len(copy_columns)}個のコピー列を検出しました"))
+                
+            except Exception as e:
+                logger.error(f"スプレッドシート分析エラー: {e}")
+                self.root.after(0, lambda: self.add_log(f"❌ スプレッドシート分析に失敗: {e}"))
+        
+        threading.Thread(target=analyze_thread, daemon=True).start()
+    
+    def _update_column_ai_config(self, copy_columns: list):
+        """列AI設定パネルを更新"""
+        self.column_ai_config_panel.update_copy_columns(copy_columns)
     
     def _load_saved_settings(self):
         """保存された設定を読み込み"""

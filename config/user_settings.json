@@ -1,0 +1,66 @@
+{
+  "ui": {
+    "window_width": 1200,
+    "window_height": 800,
+    "window_x": -1,
+    "window_y": -1,
+    "theme": "default",
+    "font_size": 10,
+    "log_lines": 100
+  },
+  "spreadsheet": {
+    "last_url": "",
+    "last_sheet": "",
+    "auto_load": false
+  },
+  "ai_settings": {
+    "ChatGPT": {
+      "enabled": false,
+      "model": "gpt-4o",
+      "settings": {
+        "temperature": 0.7,
+        "max_tokens": 2000
+      }
+    },
+    "Claude": {
+      "enabled": false,
+      "model": "claude-3-5-sonnet-20241022",
+      "settings": {
+        "max_tokens": 4000
+      }
+    },
+    "Gemini": {
+      "enabled": false,
+      "model": "gemini-2.0-flash-exp",
+      "settings": {
+        "temperature": 0.9,
+        "max_output_tokens": 2048
+      }
+    },
+    "Genspark": {
+      "enabled": false,
+      "model": "genspark-latest",
+      "settings": {}
+    },
+    "Google AI Studio": {
+      "enabled": false,
+      "model": "gemini-2.0-flash-exp",
+      "settings": {
+        "temperature": 0.9,
+        "max_output_tokens": 2048,
+        "safety_settings": "moderate"
+      }
+    }
+  },
+  "processing": {
+    "retry_count": 5,
+    "retry_delay": 10,
+    "timeout": 300,
+    "parallel_processing": false
+  },
+  "logging": {
+    "level": "INFO",
+    "max_log_files": 10,
+    "max_log_size_mb": 10
+  }
+}
