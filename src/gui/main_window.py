@@ -3,6 +3,13 @@ from tkinter import ttk, messagebox, scrolledtext
 import threading
 from src.utils.logger import get_logger
 from config.settings import settings
+from src.config_manager import get_config_manager
+from src.gui.widgets import (
+    SpreadsheetWidget,
+    AIConfigPanel,
+    ProgressWidget,
+    LogWidget
+)
 
 
 logger = get_logger(__name__)
@@ -12,78 +19,107 @@ class MainWindow:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title(settings.WINDOW_TITLE)
-        self.root.geometry(f"{settings.WINDOW_WIDTH}x{settings.WINDOW_HEIGHT}")
         
-        self.spreadsheet_url_var = tk.StringVar()
-        self.selected_sheet_var = tk.StringVar()
-        self.ai_selections = {}
-        self.model_selections = {}
+        # 設定マネージャーを取得
+        self.config_manager = get_config_manager()
+        
+        # UI設定を読み込み
+        ui_config = self.config_manager.get_ui_config()
+        window_width = ui_config.get('window_width', settings.WINDOW_WIDTH)
+        window_height = ui_config.get('window_height', settings.WINDOW_HEIGHT)
+        self.root.geometry(f"{window_width}x{window_height}")
+        
+        # 処理状態管理
         self.processing = False
         
+        # ウィジェット作成
         self._create_widgets()
         self._layout_widgets()
+        self._load_saved_settings()
+        
+        # ウィンドウクローズ時の処理
+        self.root.protocol("WM_DELETE_WINDOW", self._on_window_close)
         
         logger.info("メインウィンドウを初期化しました")
         
     def _create_widgets(self):
         self.main_frame = ttk.Frame(self.root, padding="10")
         
-        self.url_label = ttk.Label(self.main_frame, text="スプレッドシートURL:")
-        self.url_entry = ttk.Entry(self.main_frame, textvariable=self.spreadsheet_url_var, width=50)
-        self.load_button = ttk.Button(self.main_frame, text="読み込み", command=self._load_spreadsheet)
+        # スプレッドシート設定ウィジェット
+        self.spreadsheet_widget = SpreadsheetWidget(
+            self.main_frame,
+            on_sheet_selected=self._on_sheet_selected
+        )
         
-        self.sheet_label = ttk.Label(self.main_frame, text="シート選択:")
-        self.sheet_combo = ttk.Combobox(self.main_frame, textvariable=self.selected_sheet_var, state="readonly")
+        # AI設定パネル
+        self.ai_config_panel = AIConfigPanel(
+            self.main_frame,
+            on_config_changed=self._on_ai_config_changed
+        )
         
-        self.ai_frame = ttk.LabelFrame(self.main_frame, text="AI設定", padding="10")
+        # 進捗表示ウィジェット
+        self.progress_widget = ProgressWidget(self.main_frame)
         
-        self.log_frame = ttk.LabelFrame(self.main_frame, text="実行ログ", padding="10")
-        self.log_text = scrolledtext.ScrolledText(self.log_frame, height=10, width=70)
-        self.log_text.config(state=tk.DISABLED)
+        # ログ表示ウィジェット
+        self.log_widget = LogWidget(self.main_frame, max_lines=1000)
         
+        # 制御ボタン
         self.button_frame = ttk.Frame(self.main_frame)
-        self.start_button = ttk.Button(self.button_frame, text="処理開始", command=self._start_processing)
-        self.stop_button = ttk.Button(self.button_frame, text="停止", command=self._stop_processing, state=tk.DISABLED)
+        self.start_button = ttk.Button(
+            self.button_frame, 
+            text="処理開始", 
+            command=self._start_processing,
+            width=12
+        )
+        self.stop_button = ttk.Button(
+            self.button_frame, 
+            text="停止", 
+            command=self._stop_processing, 
+            state=tk.DISABLED,
+            width=12
+        )
         
+        # ステータスバー
         self.status_label = ttk.Label(self.main_frame, text="待機中", relief=tk.SUNKEN)
         
     def _layout_widgets(self):
         self.main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
         row = 0
-        self.url_label.grid(row=row, column=0, sticky=tk.W, pady=5)
-        self.url_entry.grid(row=row, column=1, sticky=(tk.W, tk.E), pady=5, padx=5)
-        self.load_button.grid(row=row, column=2, pady=5)
+        # スプレッドシート設定
+        self.spreadsheet_widget.grid(row=row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 10))
         
         row += 1
-        self.sheet_label.grid(row=row, column=0, sticky=tk.W, pady=5)
-        self.sheet_combo.grid(row=row, column=1, sticky=(tk.W, tk.E), pady=5, padx=5)
+        # AI設定パネル
+        self.ai_config_panel.grid(row=row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 10))
         
         row += 1
-        self.ai_frame.grid(row=row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=10)
+        # 進捗表示
+        self.progress_widget.grid(row=row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 10))
         
         row += 1
-        self.log_frame.grid(row=row, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=10)
-        self.log_text.pack(fill=tk.BOTH, expand=True)
+        # ログ表示
+        self.log_widget.grid(row=row, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10))
         
         row += 1
-        self.button_frame.grid(row=row, column=0, columnspan=3, pady=10)
-        self.start_button.pack(side=tk.LEFT, padx=5)
+        # 制御ボタン
+        self.button_frame.grid(row=row, column=0, columnspan=3, pady=(0, 10))
+        self.start_button.pack(side=tk.LEFT, padx=(0, 5))
         self.stop_button.pack(side=tk.LEFT, padx=5)
         
         row += 1
-        self.status_label.grid(row=row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=5)
+        # ステータスバー
+        self.status_label.grid(row=row, column=0, columnspan=3, sticky=(tk.W, tk.E))
         
+        # グリッドの重み設定
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
-        self.main_frame.columnconfigure(1, weight=1)
-        self.main_frame.rowconfigure(3, weight=1)
+        self.main_frame.columnconfigure(0, weight=1)
+        self.main_frame.rowconfigure(row-2, weight=1)  # ログ表示エリアを伸縮可能に
         
     def add_log(self, message: str, level: str = "INFO"):
-        self.log_text.config(state=tk.NORMAL)
-        self.log_text.insert(tk.END, f"[{level}] {message}\\n")
-        self.log_text.see(tk.END)
-        self.log_text.config(state=tk.DISABLED)
+        """ログメッセージを追加"""
+        self.log_widget.add_log(message, level)
         
     def update_status(self, status: str):
         self.status_label.config(text=status)
