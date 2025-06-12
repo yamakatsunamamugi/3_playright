@@ -556,7 +556,7 @@ class ImprovedMainWindow:
         try:
             # 実際のAI接続テストを実行
             import asyncio
-            from src.browser.simple_browser_manager import SimpleBrowserManager
+            from src.browser.enhanced_real_chrome_manager import EnhancedRealChromeManager
             from src.ai_tools.chatgpt_handler import ChatGPTHandler
             from src.ai_tools.base_ai_handler import AIConfig
             
@@ -573,9 +573,9 @@ class ImprovedMainWindow:
                         self.root.after(0, lambda: self.log(f"❌ Playwrightインポート失敗: {e}"))
                         raise Exception(f"Playwrightが正しくインストールされていません: {e}")
                     
-                    # SimpleBrowserManagerを初期化
-                    self.root.after(0, lambda: self.log(f"📋 ブラウザマネージャーを初期化中..."))
-                    browser_manager = SimpleBrowserManager(headless=False)
+                    # EnhancedRealChromeManagerを初期化
+                    self.root.after(0, lambda: self.log(f"📋 拡張版ブラウザマネージャーを初期化中..."))
+                    browser_manager = EnhancedRealChromeManager(cdp_port=9222)
                     
                     # ブラウザを初期化
                     if not await browser_manager.initialize():
@@ -709,7 +709,7 @@ class ImprovedMainWindow:
     
     async def _run_real_processing(self):
         """実際のAI処理を実行（CLAUDE.md要件に基づく）"""
-        from src.browser.simple_browser_manager import SimpleBrowserManager
+        from src.browser.enhanced_real_chrome_manager import EnhancedRealChromeManager
         from src.ai_tools.sheets_handler import SheetsHandler
         
         browser_manager = None
@@ -735,8 +735,12 @@ class ImprovedMainWindow:
             self.root.after(0, lambda: self.log(f"✅ 分析完了: {sheet_structure['total_copy_columns']}列, {sheet_structure['total_target_rows']}行"))
             
             # ブラウザマネージャーを初期化
-            self.root.after(0, lambda: self.log("📋 ブラウザマネージャーを初期化中..."))
-            browser_manager = SimpleBrowserManager(headless=False)
+            self.root.after(0, lambda: self.log("📋 拡張版ブラウザマネージャーを初期化中..."))
+            browser_manager = EnhancedRealChromeManager(cdp_port=9222)
+            
+            # 手動起動の手順を表示
+            instructions = browser_manager.show_manual_instructions()
+            self.root.after(0, lambda: self.log(instructions))
             
             # ブラウザを初期化
             self.root.after(0, lambda: self.log("🚀 ブラウザを起動中..."))
