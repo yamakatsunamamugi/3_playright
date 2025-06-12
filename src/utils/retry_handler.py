@@ -17,7 +17,7 @@
 import time
 import functools
 import logging
-from typing import Callable, Type, Tuple, Optional, List, Any
+from typing import Callable, Type, Tuple, Optional, List, Any, Dict
 from googleapiclient.errors import HttpError
 from src.utils.logger import get_logger
 
