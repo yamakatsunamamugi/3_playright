@@ -1,43 +1,38 @@
+#!/usr/bin/env python3
 """
-AI自動化統合テストスクリプト
-
-GUI、モデル動的取得、Chrome統合の全機能をテストします。
+AI自動化機能の統合テストスクリプト
+GUI付きでモデル選択とChrome連携をテストします
 """
-
-import asyncio
+import sys
 import tkinter as tk
-from tkinter import ttk, messagebox
-import logging
+from tkinter import ttk, messagebox, scrolledtext
 from pathlib import Path
+import asyncio
+import threading
+
+# プロジェクトルートをPythonパスに追加
+sys.path.insert(0, str(Path(__file__).parent))
 
 from src.gui.widgets.ai_config_widget import AIConfigPanel
 from src.ai_tools.browser_manager import BrowserManager
-from src.utils.logger import get_logger
+from src.utils.logger import setup_logger, get_logger
 
 # ログ設定
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-
+setup_logger("INFO", "logs/test_automation.log")
 logger = get_logger(__name__)
 
 
-class AIAutomationTestGUI:
-    """AI自動化機能の統合テストGUI"""
+class TestAutomationGUI:
+    """AI自動化機能のテストGUI"""
     
     def __init__(self):
-        """初期化"""
         self.root = tk.Tk()
-        self.root.title("AI自動化機能 統合テスト")
+        self.root.title("AI自動化機能テスト")
         self.root.geometry("900x700")
         
         self.browser_manager = None
-        self.cache_dir = Path.home() / ".ai_tools_cache"
-        
         self._create_widgets()
-        self._center_window()
-    
+        
     def _create_widgets(self):
         """ウィジェットを作成"""
         # メインフレーム
@@ -45,257 +40,277 @@ class AIAutomationTestGUI:
         main_frame.pack(fill=tk.BOTH, expand=True)
         
         # タイトル
-        title_label = ttk.Label(
-            main_frame, 
-            text="AI自動化機能 統合テスト", 
-            font=("", 16, "bold")
-        )
+        title_label = ttk.Label(main_frame, text="AI自動化機能テスト", font=("", 16, "bold"))
         title_label.pack(pady=(0, 20))
         
-        # 説明
-        desc_frame = ttk.LabelFrame(main_frame, text="テスト内容", padding="10")
-        desc_frame.pack(fill=tk.X, pady=(0, 20))
-        
-        desc_text = """このテストでは以下の機能を確認します：
-1. 各AIサービスから最新モデル情報を動的に取得
-2. 取得したモデル情報をGUIに反映
-3. 既存のChromeプロファイルを使用したブラウザ起動
-4. 各AIサービスへのアクセスとログイン状態の確認"""
-        
-        ttk.Label(desc_frame, text=desc_text, justify=tk.LEFT).pack()
-        
         # AI設定パネル
-        self.ai_config_panel = AIConfigPanel(main_frame, cache_dir=self.cache_dir)
-        self.ai_config_panel.frame.pack(fill=tk.BOTH, expand=True, pady=(0, 20))
+        self.ai_config_panel = AIConfigPanel(main_frame)
+        self.ai_config_panel.pack(fill=tk.X, pady=(0, 20))
         
-        # Chromeプロファイル選択
-        chrome_frame = ttk.LabelFrame(main_frame, text="Chromeプロファイル", padding="10")
+        # Chrome設定フレーム
+        chrome_frame = ttk.LabelFrame(main_frame, text="Chrome設定", padding="10")
         chrome_frame.pack(fill=tk.X, pady=(0, 20))
         
-        self.profile_var = tk.StringVar(value="Default")
-        self.profile_combo = ttk.Combobox(
-            chrome_frame,
-            textvariable=self.profile_var,
-            values=["Default", "Profile 1", "Profile 2"],
-            state="readonly",
-            width=30
-        )
+        # プロファイル選択
+        profile_frame = ttk.Frame(chrome_frame)
+        profile_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        ttk.Label(profile_frame, text="Chromeプロファイル:").pack(side=tk.LEFT, padx=(0, 10))
+        self.profile_var = tk.StringVar()
+        self.profile_combo = ttk.Combobox(profile_frame, textvariable=self.profile_var, 
+                                         state="readonly", width=30)
         self.profile_combo.pack(side=tk.LEFT, padx=(0, 10))
         
-        ttk.Button(
-            chrome_frame,
-            text="利用可能なプロファイルを検出",
-            command=self._detect_chrome_profiles
-        ).pack(side=tk.LEFT)
+        self.refresh_profiles_btn = ttk.Button(profile_frame, text="プロファイル更新", 
+                                              command=self._refresh_profiles)
+        self.refresh_profiles_btn.pack(side=tk.LEFT)
         
-        # テストボタン
+        # Chrome起動ボタン
+        self.launch_chrome_btn = ttk.Button(chrome_frame, text="Chrome起動（ログイン済みセッション）", 
+                                           command=self._launch_chrome)
+        self.launch_chrome_btn.pack()
+        
+        # 操作ボタンフレーム
         button_frame = ttk.Frame(main_frame)
-        button_frame.pack(fill=tk.X)
+        button_frame.pack(fill=tk.X, pady=(0, 20))
         
-        ttk.Button(
-            button_frame,
-            text="1. モデル情報取得テスト",
-            command=self._test_model_fetching,
-            width=25
-        ).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="AI設定取得テスト", 
+                  command=self._test_ai_configs).pack(side=tk.LEFT, padx=5)
         
-        ttk.Button(
-            button_frame,
-            text="2. ブラウザ起動テスト",
-            command=self._test_browser_launch,
-            width=25
-        ).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="モデル情報表示", 
+                  command=self._show_model_info).pack(side=tk.LEFT, padx=5)
         
-        ttk.Button(
-            button_frame,
-            text="3. AIアクセステスト",
-            command=self._test_ai_access,
-            width=25
-        ).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="Chrome統合テスト", 
+                  command=self._test_chrome_integration).pack(side=tk.LEFT, padx=5)
         
         # ログ表示エリア
-        log_frame = ttk.LabelFrame(main_frame, text="実行ログ", padding="5")
-        log_frame.pack(fill=tk.BOTH, expand=True, pady=(20, 0))
+        log_frame = ttk.LabelFrame(main_frame, text="ログ", padding="10")
+        log_frame.pack(fill=tk.BOTH, expand=True)
         
-        # スクロールバー付きテキストエリア
-        self.log_text = tk.Text(log_frame, height=10, wrap=tk.WORD)
-        scrollbar = ttk.Scrollbar(log_frame, command=self.log_text.yview)
-        self.log_text.configure(yscrollcommand=scrollbar.set)
+        self.log_text = scrolledtext.ScrolledText(log_frame, height=10, wrap=tk.WORD)
+        self.log_text.pack(fill=tk.BOTH, expand=True)
         
-        self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-    
-    def _center_window(self):
-        """ウィンドウを画面中央に配置"""
-        self.root.update_idletasks()
-        width = self.root.winfo_width()
-        height = self.root.winfo_height()
-        x = (self.root.winfo_screenwidth() // 2) - (width // 2)
-        y = (self.root.winfo_screenheight() // 2) - (height // 2)
-        self.root.geometry(f'{width}x{height}+{x}+{y}')
-    
-    def _log(self, message: str, level: str = "INFO"):
-        """ログメッセージを表示"""
-        timestamp = asyncio.get_event_loop().time()
-        log_entry = f"[{level}] {message}\n"
-        self.log_text.insert(tk.END, log_entry)
-        self.log_text.see(tk.END)
-        self.root.update()
-    
-    def _detect_chrome_profiles(self):
-        """利用可能なChromeプロファイルを検出"""
-        self._log("Chromeプロファイルを検出中...")
+        # 初期化
+        self._refresh_profiles()
+        self._log("テストアプリケーションを起動しました")
         
+    def _refresh_profiles(self):
+        """Chromeプロファイルリストを更新"""
         try:
-            manager = BrowserManager()
-            profiles = manager.get_available_profiles_info()
+            from src.ai_tools.browser_manager import BrowserManager
+            temp_manager = BrowserManager()
+            profiles = temp_manager.get_available_profiles_info()
             
-            if profiles:
-                profile_names = [p['name'] + f" ({p['dir']})" for p in profiles]
-                self.profile_combo['values'] = profile_names
-                self.profile_var.set(profile_names[0])
-                self._log(f"{len(profiles)}個のプロファイルを検出しました")
-                
-                # プロファイル情報を表示
-                for profile in profiles:
-                    self._log(f"  - {profile['name']} ({profile['dir']})")
-            else:
-                self._log("プロファイルが見つかりませんでした", "WARNING")
-                
+            profile_names = []
+            for profile in profiles:
+                name = profile.get('name', profile.get('dir', 'Unknown'))
+                dir_name = profile.get('dir', '')
+                profile_names.append(f"{name} ({dir_name})")
+            
+            self.profile_combo['values'] = profile_names
+            if profile_names:
+                self.profile_combo.set(profile_names[0])
+            
+            self._log(f"✓ {len(profiles)}個のChromeプロファイルを検出しました")
+            
         except Exception as e:
-            self._log(f"プロファイル検出エラー: {e}", "ERROR")
-    
-    def _test_model_fetching(self):
-        """モデル情報取得をテスト"""
-        self._log("\n=== モデル情報取得テスト開始 ===")
-        
-        # AI設定を取得
-        configs = self.ai_config_panel.get_all_configs()
-        
-        for ai_name, config in configs.items():
-            if config.get('enabled', False):
-                widget = self.ai_config_panel.ai_widgets.get(ai_name)
-                if widget:
-                    self._log(f"{ai_name} のモデル情報を更新中...")
-                    widget._refresh_models()
-                    
-        self._log("モデル情報の取得を開始しました。完了まで少々お待ちください。")
-    
-    def _test_browser_launch(self):
-        """ブラウザ起動をテスト"""
-        self._log("\n=== ブラウザ起動テスト開始 ===")
-        
-        async def launch_browser():
+            self._log(f"✗ プロファイル取得エラー: {e}", "error")
+            
+    def _launch_chrome(self):
+        """Chrome起動（ログイン済みセッション）"""
+        if self.browser_manager:
+            self._log("Chromeは既に起動しています", "warning")
+            return
+            
+        def launch_async():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
             try:
-                # 選択されたプロファイルを取得
-                profile_text = self.profile_var.get()
+                # プロファイルディレクトリを取得
+                selected = self.profile_var.get()
                 profile_dir = "Default"
-                if "(" in profile_text and ")" in profile_text:
-                    profile_dir = profile_text.split("(")[1].split(")")[0]
+                if "(" in selected and ")" in selected:
+                    profile_dir = selected.split("(")[-1].rstrip(")")
                 
-                self._log(f"プロファイル '{profile_dir}' でブラウザを起動中...")
+                self._log(f"Chrome起動中... プロファイル: {profile_dir}")
                 
                 self.browser_manager = BrowserManager(use_profile=profile_dir)
-                success = await self.browser_manager.start_browser(
-                    headless=False,
-                    use_existing_profile=True,
-                    profile_dir=profile_dir
+                success = loop.run_until_complete(
+                    self.browser_manager.start_browser(headless=False, 
+                                                      use_existing_profile=True,
+                                                      profile_dir=profile_dir)
                 )
                 
                 if success:
-                    self._log("ブラウザ起動成功 ✓")
+                    self._log("✓ Chrome起動成功（ログイン済みセッション）", "success")
                     
                     # テストページを開く
-                    page = await self.browser_manager.create_page("test", "https://www.google.com")
+                    page = loop.run_until_complete(
+                        self.browser_manager.create_page("test", "https://www.google.com")
+                    )
                     if page:
-                        self._log("テストページ (Google) を開きました")
-                        await asyncio.sleep(2)
+                        self._log("✓ テストページを開きました")
                 else:
-                    self._log("ブラウザ起動失敗", "ERROR")
+                    self._log("✗ Chrome起動失敗", "error")
+                    self.browser_manager = None
                     
             except Exception as e:
-                self._log(f"ブラウザ起動エラー: {e}", "ERROR")
+                self._log(f"✗ Chrome起動エラー: {e}", "error")
+                import traceback
+                self._log(traceback.format_exc(), "error")
+            finally:
+                loop.close()
         
-        # 非同期タスクを実行
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(launch_browser())
-    
-    def _test_ai_access(self):
-        """各AIサービスへのアクセスをテスト"""
-        self._log("\n=== AIサービスアクセステスト開始 ===")
+        thread = threading.Thread(target=launch_async, daemon=True)
+        thread.start()
         
-        if not self.browser_manager:
-            self._log("先にブラウザ起動テストを実行してください", "WARNING")
+    def _test_ai_configs(self):
+        """AI設定取得テスト"""
+        self._log("\n【AI設定取得テスト】")
+        configs = self.ai_config_panel.get_all_configs()
+        
+        for ai_name, config in configs.items():
+            enabled = config.get('enabled', False)
+            model = config.get('model', 'None')
+            status = "有効" if enabled else "無効"
+            self._log(f"  {ai_name}: {status}, モデル: {model}")
+            
+    def _show_model_info(self):
+        """モデル情報を表示"""
+        self._log("\n【モデル情報表示】")
+        
+        # 選択されているAIのモデル情報を表示
+        configs = self.ai_config_panel.get_all_configs()
+        enabled_ais = [name for name, config in configs.items() if config.get('enabled', False)]
+        
+        if not enabled_ais:
+            self._log("有効なAIがありません", "warning")
             return
-        
-        async def test_ai_services():
-            ai_urls = {
-                "ChatGPT": "https://chatgpt.com",
-                "Claude": "https://claude.ai",
-                "Gemini": "https://gemini.google.com",
-                "Genspark": "https://www.genspark.ai",
-                "Google AI Studio": "https://aistudio.google.com"
-            }
             
-            # 有効なAIサービスのみテスト
-            configs = self.ai_config_panel.get_all_configs()
-            
-            for ai_name, config in configs.items():
-                if config.get('enabled', False) and ai_name in ai_urls:
-                    url = ai_urls[ai_name]
-                    self._log(f"\n{ai_name} にアクセス中: {url}")
+        for ai_name in enabled_ais:
+            widget = self.ai_config_panel.ai_widgets.get(ai_name)
+            if widget and widget.model_infos:
+                self._log(f"\n{ai_name}のモデル:")
+                for model in widget.model_infos:
+                    self._log(f"  - {model.name}: {model.description}")
                     
-                    try:
-                        page_name = f"ai_{ai_name.lower().replace(' ', '_')}"
-                        page = await self.browser_manager.create_page(page_name, url)
-                        
-                        if page:
-                            await asyncio.sleep(3)  # ページ読み込み待機
-                            
-                            # ログイン状態を簡易チェック
-                            # 実際にはAIごとに異なるチェックが必要
-                            page_content = await page.content()
-                            
-                            if "sign in" in page_content.lower() or "log in" in page_content.lower():
-                                self._log(f"  → ログインが必要です", "WARNING")
-                            else:
-                                self._log(f"  → アクセス成功 (ログイン済みの可能性)")
-                            
-                            # スクリーンショットを撮影
-                            screenshot_path = f"test_{ai_name.lower()}.png"
-                            await page.screenshot(path=screenshot_path)
-                            self._log(f"  → スクリーンショット保存: {screenshot_path}")
-                            
-                    except Exception as e:
-                        self._log(f"  → アクセスエラー: {e}", "ERROR")
+    def _test_chrome_integration(self):
+        """Chrome統合テスト"""
+        if not self.browser_manager:
+            self._log("Chromeが起動していません", "warning")
+            return
             
-            self._log("\nAIサービスアクセステスト完了")
+        self._log("\n【Chrome統合テスト】")
         
-        # 非同期タスクを実行
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(test_ai_services())
-    
+        def test_async():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            try:
+                # ChatGPTのログイン状態をチェック
+                self._log("ChatGPTのログイン状態を確認中...")
+                is_logged_in = loop.run_until_complete(
+                    self.browser_manager.check_login_status(
+                        "https://chat.openai.com",
+                        "nav"  # ナビゲーションバーの存在でログイン判定
+                    )
+                )
+                
+                if is_logged_in:
+                    self._log("✓ ChatGPTにログイン済みです", "success")
+                else:
+                    self._log("✗ ChatGPTにログインしていません", "warning")
+                    
+                # スクリーンショットを撮影
+                filename = loop.run_until_complete(
+                    self.browser_manager.take_screenshot("test", "test_screenshot.png")
+                )
+                if filename:
+                    self._log(f"✓ スクリーンショット保存: {filename}")
+                    
+            except Exception as e:
+                self._log(f"✗ テストエラー: {e}", "error")
+            finally:
+                loop.close()
+        
+        thread = threading.Thread(target=test_async, daemon=True)
+        thread.start()
+        
+    def _log(self, message: str, level: str = "info"):
+        """ログメッセージを表示"""
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        
+        # レベルに応じて色を変更
+        if level == "error":
+            tag = "error"
+            prefix = "✗"
+        elif level == "warning":
+            tag = "warning"
+            prefix = "⚠"
+        elif level == "success":
+            tag = "success"
+            prefix = "✓"
+        else:
+            tag = "info"
+            prefix = "ℹ"
+            
+        self.log_text.insert(tk.END, f"[{timestamp}] {prefix} {message}\n")
+        
+        # タグの設定
+        self.log_text.tag_config("error", foreground="red")
+        self.log_text.tag_config("warning", foreground="orange")
+        self.log_text.tag_config("success", foreground="green")
+        self.log_text.tag_config("info", foreground="black")
+        
+        # 最後の行にタグを適用
+        line_start = self.log_text.index("end-2c linestart")
+        line_end = self.log_text.index("end-2c lineend")
+        self.log_text.tag_add(tag, line_start, line_end)
+        
+        # 自動スクロール
+        self.log_text.see(tk.END)
+        
     def run(self):
-        """GUIを実行"""
+        """アプリケーションを実行"""
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.root.mainloop()
         
-        # クリーンアップ
+    def _on_close(self):
+        """ウィンドウ終了時の処理"""
         if self.browser_manager:
-            loop = asyncio.get_event_loop()
-            loop.run_until_complete(self.browser_manager.cleanup())
-
-
-def main():
-    """メイン関数"""
-    print("AI自動化機能 統合テストを開始します\n")
-    
-    # GUIを作成して実行
-    app = AIAutomationTestGUI()
-    app.run()
-    
-    print("\nテスト終了")
+            self._log("Chromeをクリーンアップ中...")
+            
+            def cleanup_async():
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    loop.run_until_complete(self.browser_manager.cleanup())
+                except:
+                    pass
+                finally:
+                    loop.close()
+            
+            thread = threading.Thread(target=cleanup_async)
+            thread.start()
+            thread.join(timeout=5)
+            
+        self.root.destroy()
 
 
 if __name__ == "__main__":
-    main()
+    from datetime import datetime
+    
+    print("=" * 60)
+    print("AI自動化機能統合テスト")
+    print("=" * 60)
+    print()
+    print("このテストアプリケーションでは以下の機能をテストできます：")
+    print("1. 各AIツールのモデル選択機能")
+    print("2. Chrome統合（ログイン済みセッション利用）")
+    print("3. AI設定の取得と表示")
+    print()
+    print("テストGUIを起動しています...")
+    
+    app = TestAutomationGUI()
+    app.run()
