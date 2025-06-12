@@ -34,3 +34,9 @@ mypy==1.10.0
 # Async Support
 aiohttp==3.9.5
 asyncio==3.4.3
+
+# System Monitoring
+psutil==5.9.8
+
+# Enhanced Browser Automation
+fake-useragent==1.5.1

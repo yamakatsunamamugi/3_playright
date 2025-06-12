@@ -54,3 +54,22 @@ htmlcov/
 
 # Config
 config/local_settings.py
+
+# Screenshots and debug images
+*.png
+*.jpg
+*.jpeg
+*.gif
+screenshots/
+debug_screenshots/
+
+# Authentication states (sensitive)
+auth_states/
+*_session.json
+
+# HTML debug files
+*_debug.html
+
+# Browser automation
+playwright_debug.log
+ai_login_solver.log

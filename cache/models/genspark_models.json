@@ -1,43 +1,27 @@
 {
-  "timestamp": "2025-06-12T22:59:58.451290",
+  "service": "Genspark",
   "models": [
+    "Genspark Pro",
+    "Genspark Standard"
+  ],
+  "settings": [
     {
-      "id": "genspark-default",
-      "name": "Genspark Default",
-      "description": "Gensparkの標準モデル。Web検索と統合された応答生成",
-      "capabilities": [
-        "text",
-        "search",
-        "reasoning"
-      ],
-      "max_tokens": 32000,
-      "is_default": true
+      "name": "検索深度",
+      "type": "scale",
+      "default": 0.7,
+      "min": 0,
+      "max": 1
     },
     {
-      "id": "genspark-pro",
-      "name": "Genspark Pro",
-      "description": "高度な検索と分析機能を持つプロフェッショナルモデル",
-      "capabilities": [
-        "text",
-        "search",
-        "reasoning",
-        "analysis"
+      "name": "応答形式",
+      "type": "select",
+      "options": [
+        "要約",
+        "詳細",
+        "分析"
       ],
-      "max_tokens": 64000,
-      "is_default": false
-    },
-    {
-      "id": "genspark-research",
-      "name": "Genspark Research",
-      "description": "深い調査と研究に特化したモデル",
-      "capabilities": [
-        "text",
-        "search",
-        "research",
-        "citation"
-      ],
-      "max_tokens": 128000,
-      "is_default": false
+      "default": "標準"
     }
-  ]
+  ],
+  "updated_at": "2025-06-12T23:26:33.580046"
 }

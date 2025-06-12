@@ -1,0 +1,62 @@
+{
+  "chatgpt": {
+    "service_name": "ChatGPT",
+    "models": [
+      "GPT-4o",
+      "o1-preview", 
+      "o1-mini",
+      "GPT-4 Turbo",
+      "GPT-4",
+      "GPT-3.5 Turbo"
+    ],
+    "default_model": "GPT-4o",
+    "status": "アクセス成功",
+    "login_required": true
+  },
+  "claude": {
+    "service_name": "Claude",
+    "models": [
+      "Claude-3.5 Sonnet (New)",
+      "Claude-3.5 Sonnet", 
+      "Claude-3.5 Haiku",
+      "Claude-3 Opus",
+      "Claude-3 Sonnet"
+    ],
+    "default_model": "Claude-3.5 Sonnet (New)",
+    "status": "Cloudflare保護中",
+    "login_required": true
+  },
+  "gemini": {
+    "service_name": "Gemini",
+    "models": [
+      "Gemini 2.5 Flash",
+      "Gemini 1.5 Pro",
+      "Gemini 1.5 Flash",
+      "Gemini 1.0 Pro"
+    ],
+    "default_model": "Gemini 2.5 Flash",
+    "status": "アクセス可能",
+    "login_required": false
+  },
+  "genspark": {
+    "service_name": "GenSpark",
+    "models": [
+      "GenSpark AI",
+      "GenSpark Pro"
+    ],
+    "default_model": "GenSpark AI",
+    "status": "未実装",
+    "login_required": true
+  },
+  "google_ai_studio": {
+    "service_name": "Google AI Studio",
+    "models": [
+      "Gemini 1.5 Pro",
+      "Gemini 1.5 Flash",
+      "Gemini 1.0 Pro"
+    ],
+    "default_model": "Gemini 1.5 Pro",
+    "status": "未実装", 
+    "login_required": true
+  }
+}
