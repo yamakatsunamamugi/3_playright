@@ -17,17 +17,28 @@ def main():
     print("スプレッドシートAI自動処理ツール")
     print("=" * 50)
     
+    # 起動モードの選択
+    if len(sys.argv) > 1 and sys.argv[1] == "--enhanced":
+        use_enhanced = True
+        print("✓ 拡張版モードで起動")
+    else:
+        use_enhanced = False
+        print("✓ 標準モードで起動")
+    
     try:
-        # GUIアプリケーションを起動
-        from src.gui.main_window import MainWindow
-        from src.utils.logger import setup_logger
-        
         # ログ設定
+        from src.utils.logger import setup_logger
         setup_logger("INFO", "logs/app.log")
         print("✓ ログ設定完了")
         
-        # メインウィンドウを起動
-        app = MainWindow()
+        # GUIアプリケーションを起動
+        if use_enhanced:
+            from src.gui.enhanced_main_window import EnhancedMainWindow
+            app = EnhancedMainWindow()
+        else:
+            from src.gui.main_window import MainWindow
+            app = MainWindow()
+            
         print("✓ アプリケーション起動")
         
         # GUIを実行
