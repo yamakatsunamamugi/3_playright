@@ -96,7 +96,7 @@ class CloudflareBypassManager:
         """パフォーマンス最適化設定を取得"""
         return {
             'block_resources': [
-                'image', 'font', 'media', 'stylesheet', 'other'
+                # AIサイトでは全リソースを許可
             ],
             'block_domains': [
                 'googletagmanager.com',
@@ -432,7 +432,17 @@ class CloudflareBypassManager:
             url = request.url
             resource_type = request.resource_type
             
-            # 不要なリソースをブロック
+            # ChatGPTとClaudeではリソースブロックを無効化
+            if any(domain in url for domain in ['chat.openai.com', 'claude.ai']):
+                # User-Agentを設定
+                headers = request.headers.copy()
+                headers['User-Agent'] = self.performance_config['user_agents'][0]
+                
+                # リクエストを続行
+                await route.continue_(headers=headers)
+                return
+            
+            # その他のサイトでは不要なリソースをブロック
             if resource_type in self.performance_config['block_resources']:
                 await route.abort()
                 return
@@ -444,9 +454,8 @@ class CloudflareBypassManager:
                     return
             
             # User-Agentを設定
-            headers = request.headers
-            headers['User-Agent'] = context._options.get('user_agent', 
-                                                       self.performance_config['user_agents'][0])
+            headers = request.headers.copy()
+            headers['User-Agent'] = self.performance_config['user_agents'][0]
             
             # リクエストを続行
             await route.continue_(headers=headers)
@@ -487,11 +496,15 @@ class CloudflareBypassManager:
             
             # URLが指定されている場合はナビゲート
             if url:
+                logger.info(f"Navigating to {url}...")
                 success = await self.safe_goto(page, url)
                 if not success:
                     logger.error(f"Failed to navigate to {url}")
                     await page.close()
                     return None
+                logger.info(f"Successfully navigated to {url}")
+            else:
+                logger.info("No URL specified, page created with blank page")
             
             # ページを保存
             self.pages[service_name] = page

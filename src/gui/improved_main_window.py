@@ -28,7 +28,15 @@ class ImprovedMainWindow:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("スプレッドシートAI自動処理ツール - 改善版")
-        self.root.geometry("1200x800")
+        self.root.geometry("1400x900")
+        
+        # 画面の中央に配置
+        self.root.update_idletasks()
+        width = self.root.winfo_width()
+        height = self.root.winfo_height()
+        x = (self.root.winfo_screenwidth() // 2) - (width // 2)
+        y = (self.root.winfo_screenheight() // 2) - (height // 2)
+        self.root.geometry(f"{width}x{height}+{x}+{y}")
         
         # 設定マネージャー
         self.config_manager = get_config_manager()
@@ -63,20 +71,30 @@ class ImprovedMainWindow:
             else:
                 # デフォルトモデル設定
                 self.latest_models = {
-                    "chatgpt": {
+                    "ChatGPT": {
                         "service_name": "ChatGPT",
                         "models": ["GPT-4o", "o1-preview", "o1-mini", "GPT-4 Turbo"],
                         "default_model": "GPT-4o"
                     },
-                    "claude": {
+                    "Claude": {
                         "service_name": "Claude", 
                         "models": ["Claude-3.5 Sonnet (New)", "Claude-3.5 Sonnet", "Claude-3.5 Haiku"],
                         "default_model": "Claude-3.5 Sonnet (New)"
                     },
-                    "gemini": {
+                    "Gemini": {
                         "service_name": "Gemini",
                         "models": ["Gemini 2.5 Flash", "Gemini 1.5 Pro", "Gemini 1.5 Flash"],
                         "default_model": "Gemini 2.5 Flash"
+                    },
+                    "Genspark": {
+                        "service_name": "Genspark",
+                        "models": ["Genspark Pro", "Genspark Standard"],
+                        "default_model": "Genspark Pro"
+                    },
+                    "Google AI Studio": {
+                        "service_name": "Google AI Studio",
+                        "models": ["Gemini Pro", "Gemini Ultra"],
+                        "default_model": "Gemini Pro"
                     }
                 }
                 logger.info("デフォルトモデル設定を使用します")
@@ -571,7 +589,7 @@ class ImprovedMainWindow:
                     self.root.after(0, lambda: self.log(f"🚀 {ai_name}ブラウザを起動中..."))
                     
                     # AIサイトにアクセス
-                    if ai_name == "ChatGPT" or ai_name == "chatgpt":
+                    if ai_name.lower() == "chatgpt":
                         # ステルスページを作成
                         page = await bypass_manager.create_page_with_stealth(
                             "chatgpt_connection", 
@@ -603,7 +621,7 @@ class ImprovedMainWindow:
                         else:
                             raise Exception("ChatGPTページの作成に失敗しました")
                     
-                    elif ai_name == "Claude" or ai_name == "claude":
+                    elif ai_name.lower() == "claude":
                         # ステルスページを作成
                         page = await bypass_manager.create_page_with_stealth(
                             "claude_connection", 
