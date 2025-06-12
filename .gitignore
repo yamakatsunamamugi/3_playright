@@ -72,4 +72,4 @@ auth_states/
 
 # Browser automation
 playwright_debug.log
-ai_login_solver.log
+ai_login_solver.logcredentials/
