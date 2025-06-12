@@ -123,24 +123,61 @@ class MainWindow:
         
     def update_status(self, status: str):
         self.status_label.config(text=status)
+    
+    def _on_sheet_selected(self, url: str, sheet_name: str):
+        """シート選択時のコールバック処理"""
+        self.add_log(f"シートが選択されました: {sheet_name}")
+        self.update_status(f"シート選択: {sheet_name}")
+    
+    def _on_ai_config_changed(self):
+        """AI設定変更時のコールバック処理"""
+        configs = self.ai_config_panel.get_all_configs()
+        enabled_ais = [name for name, config in configs.items() if config.get('enabled', False)]
+        self.add_log(f"AI設定が変更されました: {len(enabled_ais)}個のAIが有効")
+    
+    def _load_saved_settings(self):
+        """保存された設定を読み込み"""
+        try:
+            # 設定マネージャーから設定を読み込み
+            pass
+        except Exception as e:
+            logger.error(f"設定の読み込みに失敗: {e}")
+    
+    def _on_window_close(self):
+        """ウィンドウクローズ時の処理"""
+        if self.processing:
+            result = messagebox.askyesno("確認", "処理中です。終了しますか？")
+            if not result:
+                return
         
-    def _load_spreadsheet(self):
-        url = self.spreadsheet_url_var.get()
-        if not url:
-            messagebox.showwarning("警告", "スプレッドシートURLを入力してください")
-            return
-            
-        self.add_log(f"スプレッドシートを読み込み中: {url}")
+        try:
+            # 設定を保存
+            self.config_manager.save_config()
+            logger.info("設定を保存しました")
+        except Exception as e:
+            logger.error(f"設定の保存に失敗: {e}")
+        
+        self.root.destroy()
         
     def _start_processing(self):
-        if not self.selected_sheet_var.get():
-            messagebox.showwarning("警告", "シートを選択してください")
+        # シート選択の確認
+        url, sheet_name = self.spreadsheet_widget.get_values()
+        if not url or not sheet_name:
+            messagebox.showwarning("警告", "スプレッドシートとシートを選択してください")
+            return
+        
+        # AI設定の確認
+        ai_configs = self.ai_config_panel.get_all_configs()
+        enabled_ais = [name for name, config in ai_configs.items() if config.get('enabled', False)]
+        if not enabled_ais:
+            messagebox.showwarning("警告", "少なくとも1つのAIを有効にしてください")
             return
             
         self.processing = True
         self.start_button.config(state=tk.DISABLED)
         self.stop_button.config(state=tk.NORMAL)
         self.update_status("処理中...")
+        self.add_log("処理を開始します")
         
         thread = threading.Thread(target=self._process_data)
         thread.daemon = True
@@ -168,26 +205,6 @@ class MainWindow:
             self.start_button.config(state=tk.NORMAL)
             self.stop_button.config(state=tk.DISABLED)
             
-    def create_ai_selection_widgets(self):
-        for i, ai_tool in enumerate(settings.SUPPORTED_AI_TOOLS):
-            frame = ttk.Frame(self.ai_frame)
-            frame.grid(row=i, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=2)
-            
-            label = ttk.Label(frame, text=f"{ai_tool}:", width=15)
-            label.pack(side=tk.LEFT, padx=5)
-            
-            use_var = tk.BooleanVar()
-            checkbox = ttk.Checkbutton(frame, text="使用", variable=use_var)
-            checkbox.pack(side=tk.LEFT, padx=5)
-            
-            model_var = tk.StringVar()
-            model_combo = ttk.Combobox(frame, textvariable=model_var, state="readonly", width=20)
-            model_combo.pack(side=tk.LEFT, padx=5)
-            
-            self.ai_selections[ai_tool] = use_var
-            self.model_selections[ai_tool] = (model_var, model_combo)
-            
     def run(self):
-        self.create_ai_selection_widgets()
         logger.info("アプリケーションを起動します")
         self.root.mainloop()

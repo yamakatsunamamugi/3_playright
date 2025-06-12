@@ -6,13 +6,14 @@ GUI ウィジェットモジュール
 """
 
 from .spreadsheet_widget import SpreadsheetWidget
-from .ai_config_widget import AIConfigWidget  
+from .ai_config_widget import AIConfigWidget, AIConfigPanel
 from .progress_widget import ProgressWidget
 from .log_widget import LogWidget
 
 __all__ = [
     'SpreadsheetWidget',
-    'AIConfigWidget', 
+    'AIConfigWidget',
+    'AIConfigPanel',
     'ProgressWidget',
     'LogWidget'
 ]
