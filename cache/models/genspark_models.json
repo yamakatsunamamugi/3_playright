@@ -1,0 +1,43 @@
+{
+  "timestamp": "2025-06-12T22:59:58.451290",
+  "models": [
+    {
+      "id": "genspark-default",
+      "name": "Genspark Default",
+      "description": "Gensparkの標準モデル。Web検索と統合された応答生成",
+      "capabilities": [
+        "text",
+        "search",
+        "reasoning"
+      ],
+      "max_tokens": 32000,
+      "is_default": true
+    },
+    {
+      "id": "genspark-pro",
+      "name": "Genspark Pro",
+      "description": "高度な検索と分析機能を持つプロフェッショナルモデル",
+      "capabilities": [
+        "text",
+        "search",
+        "reasoning",
+        "analysis"
+      ],
+      "max_tokens": 64000,
+      "is_default": false
+    },
+    {
+      "id": "genspark-research",
+      "name": "Genspark Research",
+      "description": "深い調査と研究に特化したモデル",
+      "capabilities": [
+        "text",
+        "search",
+        "research",
+        "citation"
+      ],
+      "max_tokens": 128000,
+      "is_default": false
+    }
+  ]
+}

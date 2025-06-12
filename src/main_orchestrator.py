@@ -7,7 +7,7 @@ import time
 from typing import Dict, List, Optional, Any
 from src.utils.logger import get_logger
 from src.orchestrator import Orchestrator
-from src.sheets.processor import SheetProcessor
+from src.sheets.processor import SpreadsheetProcessor
 from src.sheets.client import GoogleSheetsClient
 from src.sheets.data_handler import DataHandler
 from src.ai_tools.browser_manager import BrowserManager

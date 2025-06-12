@@ -86,10 +86,9 @@ class EnhancedBrowserManager:
                 if profile_path:
                     temp_profile = self._create_temp_profile(profile_path)
                     if temp_profile:
-                        launch_options['args'].extend([
-                            f'--user-data-dir={temp_profile["dir"]}',
-                            f'--profile-directory={temp_profile["name"]}'
-                        ])
+                        # user_data_dirはlaunch_persistent_contextで使用するため、通常のlaunchでは使用しない
+                        # 代わりに空のプロファイルを使用
+                        pass
             
             # ブラウザを起動
             self.browser = await self.playwright.chromium.launch(**launch_options)

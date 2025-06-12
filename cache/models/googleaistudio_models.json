@@ -1,0 +1,97 @@
+{
+  "timestamp": "2025-06-12T22:59:58.453245",
+  "models": [
+    {
+      "id": "gemini-2.0-flash-exp",
+      "name": "Gemini 2.0 Flash (Experimental)",
+      "description": "最新の実験的高速モデル。マルチモーダル対応",
+      "capabilities": [
+        "text",
+        "vision",
+        "code",
+        "reasoning",
+        "audio"
+      ],
+      "max_tokens": 1048576,
+      "is_default": false
+    },
+    {
+      "id": "gemini-1.5-pro-002",
+      "name": "Gemini 1.5 Pro 002",
+      "description": "最新版のGemini 1.5 Pro。最大2Mトークン対応",
+      "capabilities": [
+        "text",
+        "vision",
+        "code",
+        "reasoning",
+        "audio",
+        "video"
+      ],
+      "max_tokens": 2097152,
+      "is_default": true
+    },
+    {
+      "id": "gemini-1.5-pro-001",
+      "name": "Gemini 1.5 Pro 001",
+      "description": "安定版のGemini 1.5 Pro",
+      "capabilities": [
+        "text",
+        "vision",
+        "code",
+        "reasoning",
+        "audio"
+      ],
+      "max_tokens": 2097152,
+      "is_default": false
+    },
+    {
+      "id": "gemini-1.5-flash-002",
+      "name": "Gemini 1.5 Flash 002",
+      "description": "最新版の高速モデル",
+      "capabilities": [
+        "text",
+        "vision",
+        "code",
+        "reasoning"
+      ],
+      "max_tokens": 1048576,
+      "is_default": false
+    },
+    {
+      "id": "gemini-1.5-flash-001",
+      "name": "Gemini 1.5 Flash 001",
+      "description": "安定版の高速モデル",
+      "capabilities": [
+        "text",
+        "vision",
+        "code",
+        "reasoning"
+      ],
+      "max_tokens": 1048576,
+      "is_default": false
+    },
+    {
+      "id": "gemini-1.5-flash-8b-exp-0924",
+      "name": "Gemini 1.5 Flash-8B (Experimental)",
+      "description": "実験的な超軽量モデル",
+      "capabilities": [
+        "text",
+        "code"
+      ],
+      "max_tokens": 1048576,
+      "is_default": false
+    },
+    {
+      "id": "gemini-1.0-pro",
+      "name": "Gemini 1.0 Pro",
+      "description": "従来の安定版モデル",
+      "capabilities": [
+        "text",
+        "code",
+        "reasoning"
+      ],
+      "max_tokens": 32768,
+      "is_default": false
+    }
+  ]
+}
