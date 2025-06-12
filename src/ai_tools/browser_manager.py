@@ -147,13 +147,21 @@ class BrowserManager:
                         else:
                             shutil.copy2(src, dst)
                 
-                # ブラウザ起動オプション
+                # ブラウザ起動オプション（Cloudflare回避対策を強化）
                 launch_args = [
                     "--no-sandbox",
                     "--disable-blink-features=AutomationControlled",
                     "--disable-web-security",
                     "--disable-features=IsolateOrigins,site-per-process",
                     "--disable-dev-shm-usage",
+                    "--disable-setuid-sandbox",
+                    "--disable-notifications",
+                    "--disable-geolocation",
+                    "--disable-infobars",
+                    "--window-size=1920,1080",
+                    "--start-maximized",
+                    "--disable-blink-features=AutomationControlled",
+                    "--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
                     f"--user-data-dir={temp_dir}",
                     f"--profile-directory={os.path.basename(temp_profile_dir)}"
                 ]
@@ -179,19 +187,95 @@ class BrowserManager:
                     args=[
                         "--no-sandbox",
                         "--disable-blink-features=AutomationControlled",
-                        "--disable-dev-shm-usage"
+                        "--disable-dev-shm-usage",
+                        "--disable-setuid-sandbox",
+                        "--disable-notifications",
+                        "--disable-geolocation",
+                        "--disable-infobars",
+                        "--window-size=1920,1080",
+                        "--start-maximized"
                     ],
                     ignore_default_args=["--enable-automation"]
                 )
                 self.context = await self.browser.new_context(
-                    viewport={'width': 1280, 'height': 720},
-                    user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                    viewport={'width': 1920, 'height': 1080},
+                    user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                    locale='ja-JP',
+                    timezone_id='Asia/Tokyo'
                 )
             
-            # JavaScript実行でNavigator.webdriverを削除
+            # JavaScript実行でbot検出回避を強化
             await self.context.add_init_script("""
+                // navigator.webdriverを削除
                 Object.defineProperty(navigator, 'webdriver', {
                     get: () => undefined
+                });
+                
+                // ChromeDriverの痕跡を削除
+                Object.defineProperty(navigator, 'plugins', {
+                    get: () => [
+                        {
+                            0: {type: "application/x-google-chrome-pdf", suffixes: "pdf", description: "Portable Document Format"},
+                            description: "Portable Document Format", 
+                            filename: "internal-pdf-viewer",
+                            length: 1,
+                            name: "Chrome PDF Plugin"
+                        }
+                    ]
+                });
+                
+                // 権限APIをオーバーライド
+                const originalQuery = window.navigator.permissions.query;
+                window.navigator.permissions.query = (parameters) => (
+                    parameters.name === 'notifications' ?
+                        Promise.resolve({ state: Notification.permission }) :
+                        originalQuery(parameters)
+                );
+                
+                // Chrome固有のプロパティを追加
+                window.chrome = {
+                    runtime: {},
+                    loadTimes: function() {},
+                    csi: function() {},
+                    app: {}
+                };
+                
+                // タイムゾーンとロケールを設定
+                Object.defineProperty(navigator, 'language', {
+                    get: () => 'ja-JP'
+                });
+                
+                Object.defineProperty(navigator, 'languages', {
+                    get: () => ['ja-JP', 'ja', 'en-US', 'en']
+                });
+                
+                // WebGL Vendor/Rendererを実際のハードウェアに偽装
+                const getParameter = WebGLRenderingContext.prototype.getParameter;
+                WebGLRenderingContext.prototype.getParameter = function(parameter) {
+                    if (parameter === 37445) {
+                        return 'Intel Inc.';
+                    }
+                    if (parameter === 37446) {
+                        return 'Intel Iris OpenGL Engine';
+                    }
+                    return getParameter(parameter);
+                };
+                
+                // 画面解像度を設定
+                Object.defineProperty(screen, 'width', {
+                    get: () => 1920
+                });
+                Object.defineProperty(screen, 'height', {
+                    get: () => 1080
+                });
+                
+                // その他のナビゲータープロパティ
+                Object.defineProperty(navigator, 'hardwareConcurrency', {
+                    get: () => 8
+                });
+                
+                Object.defineProperty(navigator, 'deviceMemory', {
+                    get: () => 8
                 });
             """)
             
