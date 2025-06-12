@@ -27,20 +27,35 @@ class SheetsHandler:
     
     SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
     
-    def __init__(self, credentials_path: str = "google_service_account.json"):
+    def __init__(self, credentials_path: str = None):
         """
         初期化
         
         Args:
             credentials_path: 認証情報ファイルのパス
         """
+        # 認証ファイルパスを自動検出
+        if credentials_path is None:
+            import os
+            possible_paths = [
+                "credentials/google_service_account.json",
+                "google_service_account.json",
+                "../credentials/google_service_account.json",
+                os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "credentials", "google_service_account.json")
+            ]
+            
+            for path in possible_paths:
+                if os.path.exists(path):
+                    credentials_path = path
+                    break
+        
         self.credentials_path = credentials_path
         self.service = None
         self.spreadsheet_id = None
         self.sheet_name = None
         self.work_instruction_row = 5  # CLAUDE.md要件：5行目が作業指示行
         
-        logger.info("📊 SheetsHandler を初期化しました")
+        logger.info(f"📊 SheetsHandler を初期化しました (認証ファイル: {self.credentials_path})")
     
     def authenticate(self) -> bool:
         """
@@ -52,19 +67,93 @@ class SheetsHandler:
         try:
             logger.info("🔐 Google Sheets API認証を開始...")
             
-            # サービスアカウント認証
+            # まずサービスアカウント認証を試行
+            if self._try_service_account_auth():
+                return True
+            
+            # サービスアカウントが失敗した場合、OAuth2認証を試行
+            logger.info("🔄 OAuth2認証を試行...")
+            return self._try_oauth2_auth()
+            
+        except Exception as e:
+            logger.error(f"❌ Google Sheets API認証エラー: {e}")
+            return False
+    
+    def _try_service_account_auth(self) -> bool:
+        """サービスアカウント認証を試行"""
+        try:
             from google.oauth2 import service_account
+            import os
+            
+            if not os.path.exists(self.credentials_path):
+                logger.warning(f"⚠️ サービスアカウントファイルが見つかりません: {self.credentials_path}")
+                return False
             
             credentials = service_account.Credentials.from_service_account_file(
                 self.credentials_path, scopes=self.SCOPES
             )
             
             self.service = build('sheets', 'v4', credentials=credentials)
-            logger.info("✅ Google Sheets API認証完了")
+            logger.info("✅ サービスアカウント認証完了")
             return True
             
         except Exception as e:
-            logger.error(f"❌ Google Sheets API認証エラー: {e}")
+            logger.warning(f"⚠️ サービスアカウント認証失敗: {e}")
+            return False
+    
+    def _try_oauth2_auth(self) -> bool:
+        """OAuth2認証を試行"""
+        try:
+            import os
+            from google.auth.transport.requests import Request
+            from google_auth_oauthlib.flow import InstalledAppFlow
+            import pickle
+            
+            creds = None
+            token_path = 'token.pickle'
+            
+            # 既存のトークンをチェック
+            if os.path.exists(token_path):
+                with open(token_path, 'rb') as token:
+                    creds = pickle.load(token)
+            
+            # 認証情報が無効または存在しない場合
+            if not creds or not creds.valid:
+                if creds and creds.expired and creds.refresh_token:
+                    creds.refresh(Request())
+                else:
+                    # credentials.jsonを探す
+                    credentials_json_paths = [
+                        'credentials.json',
+                        'credentials/credentials.json',
+                        'config/credentials.json'
+                    ]
+                    
+                    credentials_json_path = None
+                    for path in credentials_json_paths:
+                        if os.path.exists(path):
+                            credentials_json_path = path
+                            break
+                    
+                    if not credentials_json_path:
+                        logger.error("❌ credentials.jsonファイルが見つかりません")
+                        return False
+                    
+                    flow = InstalledAppFlow.from_client_secrets_file(
+                        credentials_json_path, self.SCOPES
+                    )
+                    creds = flow.run_local_server(port=0)
+                
+                # トークンを保存
+                with open(token_path, 'wb') as token:
+                    pickle.dump(creds, token)
+            
+            self.service = build('sheets', 'v4', credentials=creds)
+            logger.info("✅ OAuth2認証完了")
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ OAuth2認証失敗: {e}")
             return False
     
     def set_spreadsheet(self, spreadsheet_url: str, sheet_name: str) -> bool:
