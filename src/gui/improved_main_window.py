@@ -481,44 +481,106 @@ class ImprovedMainWindow:
                     
                     self.root.after(0, lambda: self.log(f"🚀 {ai_name}ブラウザを起動中..."))
                     
-                    # ブラウザを起動（ヘッドレスではなく実際に表示）
-                    self.root.after(0, lambda: self.log(f"🔧 Playwright起動パラメータ: headless=False, use_existing_profile=True"))
-                    browser_started = await browser_manager.start_browser(
-                        headless=False, 
-                        use_existing_profile=True
-                    )
+                    # まず最もシンプルな方法でブラウザ起動を試行
+                    self.root.after(0, lambda: self.log(f"🔧 シンプルモードでブラウザ起動試行..."))
                     
-                    self.root.after(0, lambda: self.log(f"🔍 ブラウザ起動結果: {browser_started}"))
+                    try:
+                        browser_started = await browser_manager.start_browser(
+                            headless=False, 
+                            use_existing_profile=False  # まずは新しいプロファイルで試行
+                        )
+                        
+                        if browser_started:
+                            self.root.after(0, lambda: self.log(f"✅ ブラウザ起動成功（新しいプロファイル）"))
+                        else:
+                            self.root.after(0, lambda: self.log(f"⚠️ 新しいプロファイルでも失敗、ヘッドレスモード試行..."))
+                            
+                            # ヘッドレスモードで試行
+                            browser_started = await browser_manager.start_browser(
+                                headless=True, 
+                                use_existing_profile=False
+                            )
+                            
+                            if browser_started:
+                                self.root.after(0, lambda: self.log(f"✅ ヘッドレスモードでブラウザ起動成功"))
+                            else:
+                                # Playwright自体のテスト
+                                self.root.after(0, lambda: self.log(f"🔍 Playwright基本機能テスト中..."))
+                                from playwright.async_api import async_playwright
+                                
+                                pw = await async_playwright().start()
+                                try:
+                                    test_browser = await pw.chromium.launch(headless=True)
+                                    self.root.after(0, lambda: self.log(f"✅ Playwright基本機能は正常"))
+                                    await test_browser.close()
+                                    await pw.stop()
+                                    
+                                    raise Exception("BrowserManagerの実装に問題があります")
+                                except Exception as pw_error:
+                                    await pw.stop()
+                                    raise Exception(f"Playwright自体の問題: {str(pw_error)}")
+                                    
+                    except Exception as browser_error:
+                        import traceback
+                        error_trace = traceback.format_exc()
+                        self.root.after(0, lambda: self.log(f"🔍 ブラウザ起動詳細エラー: {str(browser_error)}"))
+                        self.root.after(0, lambda: self.log(f"🔍 エラートレース: {error_trace}"))
+                        raise Exception(f"ブラウザ起動完全失敗: {str(browser_error)}")
                     
                     if not browser_started:
-                        raise Exception("ブラウザの起動に失敗しました")
+                        raise Exception("すべての起動方法が失敗しました")
                     
                     self.root.after(0, lambda: self.log(f"✅ {ai_name}ブラウザ起動成功"))
                     
-                    # AIハンドラーを作成
+                    # AIサイトにアクセス
                     if ai_name == "ChatGPT":
-                        config = AIConfig(ai_name="chatgpt", model_name="gpt-4o")
-                        page = await browser_manager.create_page("chatgpt_test", "https://chat.openai.com")
+                        page = await browser_manager.create_page("chatgpt_connection", "https://chat.openai.com")
                         
                         if page:
                             self.root.after(0, lambda: self.log(f"✅ {ai_name}サイトへのアクセス成功"))
+                            self.root.after(0, lambda: self.log(f"🌐 ChatGPTブラウザが開きました - 手動でログイン可能"))
+                            
+                            # ページ読み込み待機
+                            await asyncio.sleep(3)
                             
                             # ログイン状態をチェック
-                            await asyncio.sleep(3)  # ページ読み込み待機
-                            
-                            # ログインボタンの存在確認でログイン状態をチェック
                             login_button = await page.query_selector('[data-testid="login-button"]')
                             if login_button:
-                                self.root.after(0, lambda: self.log(f"⚠️ {ai_name}にログインが必要です"))
+                                self.root.after(0, lambda: self.log(f"⚠️ {ai_name}にログインしてください"))
+                                self.root.after(0, lambda: self.log(f"💡 ブラウザでログイン後、処理を開始できます"))
                             else:
-                                # チャット入力欄の存在確認
+                                # チャット入力欄の確認
                                 chat_input = await page.query_selector('[data-testid="prompt-textarea"]')
                                 if chat_input:
-                                    self.root.after(0, lambda: self.log(f"✅ {ai_name}ログイン状態確認済み"))
+                                    self.root.after(0, lambda: self.log(f"✅ {ai_name}ログイン済み - 準備完了"))
                                 else:
-                                    self.root.after(0, lambda: self.log(f"⚠️ {ai_name}の状態が不明です"))
+                                    self.root.after(0, lambda: self.log(f"⚠️ {ai_name}の状態確認中..."))
                         else:
-                            raise Exception("ページの作成に失敗しました")
+                            raise Exception("ChatGPTページの作成に失敗しました")
+                    
+                    elif ai_name == "Claude" or ai_name == "claude":
+                        page = await browser_manager.create_page("claude_connection", "https://claude.ai")
+                        
+                        if page:
+                            self.root.after(0, lambda: self.log(f"✅ Claudeサイトへのアクセス成功"))
+                            self.root.after(0, lambda: self.log(f"🌐 Claudeブラウザが開きました - 手動でログイン可能"))
+                            
+                            # ページ読み込み待機
+                            await asyncio.sleep(3)
+                            
+                            # Claude の入力欄をチェック
+                            chat_input = await page.query_selector('div[contenteditable="true"]')
+                            if chat_input:
+                                self.root.after(0, lambda: self.log(f"✅ Claudeログイン済み - 準備完了"))
+                            else:
+                                self.root.after(0, lambda: self.log(f"⚠️ Claudeにログインしてください"))
+                                self.root.after(0, lambda: self.log(f"💡 ブラウザでログイン後、処理を開始できます"))
+                        else:
+                            raise Exception("Claudeページの作成に失敗しました")
+                    
+                    else:
+                        # その他のAI（将来の拡張用）
+                        self.root.after(0, lambda: self.log(f"⚠️ {ai_name}は接続テスト対象外です"))
                     
                     # テスト完了
                     self.root.after(0, lambda: self.log(f"✅ {column_name}の{ai_name}接続テスト完了"))
@@ -530,10 +592,9 @@ class ImprovedMainWindow:
                     self.root.after(0, lambda: self.log(f"🔍 詳細エラー: {error_details}"))
                     raise
                 finally:
-                    # クリーンアップ
-                    if browser_manager:
-                        await browser_manager.cleanup()
-                        self.root.after(0, lambda: self.log(f"🧹 {ai_name}ブラウザをクリーンアップしました"))
+                    # 接続テストではクリーンアップしない（ブラウザを開いたまま）
+                    self.root.after(0, lambda: self.log(f"🌐 {ai_name}ブラウザは開いたままにします（手動で操作可能）"))
+                    # browser_manager.cleanup() をコメントアウト - ブラウザを閉じない
             
             # 非同期テストを実行
             asyncio.run(run_real_test())
