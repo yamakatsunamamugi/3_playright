@@ -127,26 +127,16 @@ class CloudflareBypassManager:
                 '--no-sandbox',
                 '--disable-blink-features=AutomationControlled',
                 '--disable-dev-shm-usage',
-                '--disable-web-security',
-                '--disable-features=IsolateOrigins,site-per-process',
                 '--disable-notifications',
                 '--disable-popup-blocking',
                 '--disable-geolocation',
-                '--disable-background-timer-throttling',
-                '--disable-backgrounding-occluded-windows',
-                '--disable-renderer-backgrounding',
-                '--disable-field-trial-config',
-                '--disable-back-forward-cache',
-                '--disable-backgrounding-occluded-windows',
-                '--disable-renderer-backgrounding',
                 '--disable-extensions',
                 '--disable-plugins',
                 '--disable-default-apps',
-                '--disable-background-networking',
                 '--no-default-browser-check',
                 '--no-first-run',
-                '--disable-ipc-flooding-protection',
-                '--disable-component-extensions-with-background-pages'
+                '--window-size=1920,1080',
+                '--start-maximized'
             ],
             'ignore_default_args': [
                 '--enable-automation',
@@ -247,8 +237,8 @@ class CloudflareBypassManager:
             # 高度なbot検出回避スクリプト
             await self._inject_stealth_scripts(context)
             
-            # リクエストインターセプション設定
-            await self._setup_request_interception(context)
+            # リクエストインターセプション設定（無効化）
+            # await self._setup_request_interception(context)
             
             # コンテキストを保存
             self.contexts[service_name] = context
@@ -427,42 +417,8 @@ class CloudflareBypassManager:
         """
         リクエストインターセプションを設定してパフォーマンスを最適化
         """
-        async def handle_route(route):
-            request = route.request
-            url = request.url
-            resource_type = request.resource_type
-            
-            # ChatGPTとClaudeではリソースブロックを無効化
-            if any(domain in url for domain in ['chat.openai.com', 'claude.ai']):
-                # User-Agentを設定
-                headers = request.headers.copy()
-                headers['User-Agent'] = self.performance_config['user_agents'][0]
-                
-                # リクエストを続行
-                await route.continue_(headers=headers)
-                return
-            
-            # その他のサイトでは不要なリソースをブロック
-            if resource_type in self.performance_config['block_resources']:
-                await route.abort()
-                return
-            
-            # 不要なドメインをブロック
-            for blocked_domain in self.performance_config['block_domains']:
-                if blocked_domain in url:
-                    await route.abort()
-                    return
-            
-            # User-Agentを設定
-            headers = request.headers.copy()
-            headers['User-Agent'] = self.performance_config['user_agents'][0]
-            
-            # リクエストを続行
-            await route.continue_(headers=headers)
-        
-        # すべてのリクエストをインターセプト
-        await context.route("**/*", handle_route)
-        logger.debug("Request interception configured")
+        # AI サービスではリクエストインターセプションを無効化
+        logger.debug("Request interception disabled for AI services")
     
     async def create_page_with_stealth(
         self,

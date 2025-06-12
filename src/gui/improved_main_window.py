@@ -556,14 +556,14 @@ class ImprovedMainWindow:
         try:
             # 実際のAI接続テストを実行
             import asyncio
-            from src.browser.cloudflare_bypass_manager import CloudflareBypassManager
+            from src.browser.simple_browser_manager import SimpleBrowserManager
             from src.ai_tools.chatgpt_handler import ChatGPTHandler
             from src.ai_tools.base_ai_handler import AIConfig
             
             async def run_real_test():
-                bypass_manager = None
+                browser_manager = None
                 try:
-                    self.root.after(0, lambda: self.log(f"🔧 {ai_name}接続テスト開始 - Cloudflare回避機能有効"))
+                    self.root.after(0, lambda: self.log(f"🔧 {ai_name}接続テスト開始"))
                     
                     # Playwrightの確認
                     try:
@@ -573,25 +573,21 @@ class ImprovedMainWindow:
                         self.root.after(0, lambda: self.log(f"❌ Playwrightインポート失敗: {e}"))
                         raise Exception(f"Playwrightが正しくインストールされていません: {e}")
                     
-                    # CloudflareBypassManagerを初期化
-                    self.root.after(0, lambda: self.log(f"🛡️ Cloudflare回避マネージャーを初期化中..."))
-                    bypass_manager = CloudflareBypassManager(
-                        headless=False, 
-                        use_existing_profile=True,
-                        debug_mode=True
-                    )
+                    # SimpleBrowserManagerを初期化
+                    self.root.after(0, lambda: self.log(f"📋 ブラウザマネージャーを初期化中..."))
+                    browser_manager = SimpleBrowserManager(headless=False)
                     
                     # ブラウザを初期化
-                    if not await bypass_manager.initialize():
-                        raise Exception("Cloudflare回避マネージャーの初期化に失敗しました")
+                    if not await browser_manager.initialize():
+                        raise Exception("ブラウザマネージャーの初期化に失敗しました")
                     
-                    self.root.after(0, lambda: self.log(f"✅ Cloudflare回避マネージャー初期化完了"))
+                    self.root.after(0, lambda: self.log(f"✅ ブラウザマネージャー初期化完了"))
                     self.root.after(0, lambda: self.log(f"🚀 {ai_name}ブラウザを起動中..."))
                     
                     # AIサイトにアクセス
                     if ai_name.lower() == "chatgpt":
-                        # ステルスページを作成
-                        page = await bypass_manager.create_page_with_stealth(
+                        # ページを作成
+                        page = await browser_manager.create_page(
                             "chatgpt_connection", 
                             "https://chat.openai.com"
                         )
@@ -613,17 +609,16 @@ class ImprovedMainWindow:
                                 chat_input = await page.query_selector('[data-testid="prompt-textarea"]')
                                 if chat_input:
                                     self.root.after(0, lambda: self.log(f"✅ {ai_name}ログイン済み - 準備完了"))
-                                    # セッションを保存
-                                    await bypass_manager.save_session("chatgpt_connection")
-                                    self.root.after(0, lambda: self.log(f"💾 ChatGPTセッションを保存しました"))
+                                    # セッション保存（SimpleBrowserManagerでは実装なし）
+                                    self.root.after(0, lambda: self.log(f"✅ ChatGPT準備完了"))
                                 else:
                                     self.root.after(0, lambda: self.log(f"⚠️ {ai_name}の状態確認中..."))
                         else:
                             raise Exception("ChatGPTページの作成に失敗しました")
                     
                     elif ai_name.lower() == "claude":
-                        # ステルスページを作成
-                        page = await bypass_manager.create_page_with_stealth(
+                        # ページを作成
+                        page = await browser_manager.create_page(
                             "claude_connection", 
                             "https://claude.ai"
                         )
@@ -639,9 +634,8 @@ class ImprovedMainWindow:
                             chat_input = await page.query_selector('div[contenteditable="true"]')
                             if chat_input:
                                 self.root.after(0, lambda: self.log(f"✅ Claudeログイン済み - 準備完了"))
-                                # セッションを保存
-                                await bypass_manager.save_session("claude_connection")
-                                self.root.after(0, lambda: self.log(f"💾 Claudeセッションを保存しました"))
+                                # セッション保存（SimpleBrowserManagerでは実装なし）
+                                self.root.after(0, lambda: self.log(f"✅ Claude準備完了"))
                             else:
                                 self.root.after(0, lambda: self.log(f"⚠️ Claudeにログインしてください"))
                                 self.root.after(0, lambda: self.log(f"💡 ブラウザでログイン後、処理を開始できます"))
@@ -664,7 +658,7 @@ class ImprovedMainWindow:
                 finally:
                     # 接続テストではクリーンアップしない（ブラウザを開いたまま）
                     self.root.after(0, lambda: self.log(f"🌐 {ai_name}ブラウザは開いたままにします（手動で操作可能）"))
-                    # bypass_manager.cleanup() をコメントアウト - ブラウザを閉じない
+                    # browser_manager.cleanup() をコメントアウト - ブラウザを閉じない
             
             # 非同期テストを実行
             asyncio.run(run_real_test())
@@ -715,10 +709,10 @@ class ImprovedMainWindow:
     
     async def _run_real_processing(self):
         """実際のAI処理を実行（CLAUDE.md要件に基づく）"""
-        from src.browser.cloudflare_bypass_manager import CloudflareBypassManager
+        from src.browser.simple_browser_manager import SimpleBrowserManager
         from src.ai_tools.sheets_handler import SheetsHandler
         
-        bypass_manager = None
+        browser_manager = None
         sheets_handler = None
         
         try:
@@ -740,20 +734,16 @@ class ImprovedMainWindow:
             
             self.root.after(0, lambda: self.log(f"✅ 分析完了: {sheet_structure['total_copy_columns']}列, {sheet_structure['total_target_rows']}行"))
             
-            # Cloudflare回避マネージャーを初期化
-            self.root.after(0, lambda: self.log("🛡️ Cloudflare回避マネージャーを初期化中..."))
-            bypass_manager = CloudflareBypassManager(
-                headless=False, 
-                use_existing_profile=True,
-                debug_mode=False  # 本番処理ではデバッグ無効
-            )
+            # ブラウザマネージャーを初期化
+            self.root.after(0, lambda: self.log("📋 ブラウザマネージャーを初期化中..."))
+            browser_manager = SimpleBrowserManager(headless=False)
             
             # ブラウザを初期化
             self.root.after(0, lambda: self.log("🚀 ブラウザを起動中..."))
-            if not await bypass_manager.initialize():
-                raise Exception("Cloudflare回避マネージャーの初期化に失敗しました")
+            if not await browser_manager.initialize():
+                raise Exception("ブラウザマネージャーの初期化に失敗しました")
             
-            self.root.after(0, lambda: self.log("✅ Cloudflare回避機能付きブラウザ起動成功"))
+            self.root.after(0, lambda: self.log("✅ ブラウザ起動成功"))
             
             # 実際の処理開始
             total_tasks = len(sheet_structure['copy_columns']) * len(sheet_structure['target_rows'])
@@ -806,7 +796,7 @@ class ImprovedMainWindow:
                         
                         # AIで処理
                         ai_result = await self._process_single_text_with_ai(
-                            bypass_manager, ai, copy_text, model
+                            browser_manager, ai, copy_text, model
                         )
                         
                         if ai_result:
@@ -850,16 +840,16 @@ class ImprovedMainWindow:
             raise
         finally:
             # リソースのクリーンアップ
-            if bypass_manager:
+            if browser_manager:
                 # ブラウザは接続テスト時と同様に開いたままにする
                 self.root.after(0, lambda: self.log("🌐 ブラウザは開いたままにします（手動で操作可能）"))
     
-    async def _process_single_text_with_ai(self, bypass_manager, ai_name: str, text: str, model: str) -> Optional[str]:
+    async def _process_single_text_with_ai(self, browser_manager, ai_name: str, text: str, model: str) -> Optional[str]:
         """
         単一テキストをAIで処理
         
         Args:
-            bypass_manager: Cloudflare回避マネージャー
+            browser_manager: ブラウザマネージャー
             ai_name: AI名
             text: 処理するテキスト
             model: 使用モデル
@@ -869,15 +859,15 @@ class ImprovedMainWindow:
         """
         try:
             if ai_name == "ChatGPT" or ai_name == "chatgpt":
-                return await self._process_text_with_chatgpt(bypass_manager, text, model)
+                return await self._process_text_with_chatgpt(browser_manager, text, model)
             elif ai_name == "Claude" or ai_name == "claude":
-                return await self._process_text_with_claude(bypass_manager, text, model)
+                return await self._process_text_with_claude(browser_manager, text, model)
             elif ai_name == "Gemini" or ai_name == "gemini":
-                return await self._process_text_with_gemini(bypass_manager, text, model)
+                return await self._process_text_with_gemini(browser_manager, text, model)
             elif ai_name == "Genspark" or ai_name == "genspark":
-                return await self._process_text_with_genspark(bypass_manager, text, model)
+                return await self._process_text_with_genspark(browser_manager, text, model)
             elif ai_name == "Google AI Studio":
-                return await self._process_text_with_google_ai_studio(bypass_manager, text, model)
+                return await self._process_text_with_google_ai_studio(browser_manager, text, model)
             else:
                 self.root.after(0, lambda: self.log(f"❌ 未対応のAI: {ai_name}"))
                 return None
@@ -885,10 +875,10 @@ class ImprovedMainWindow:
             self.root.after(0, lambda: self.log(f"❌ {ai_name}テキスト処理エラー: {str(e)}"))
             return None
     
-    async def _process_text_with_chatgpt(self, bypass_manager, text: str, model: str) -> Optional[str]:
+    async def _process_text_with_chatgpt(self, browser_manager, text: str, model: str) -> Optional[str]:
         """ChatGPTでテキストを処理"""
         try:
-            page = await bypass_manager.create_page_with_stealth("chatgpt_process", "https://chat.openai.com")
+            page = await browser_manager.create_page("chatgpt_process", "https://chat.openai.com")
             
             if not page:
                 return None
@@ -938,10 +928,10 @@ class ImprovedMainWindow:
             self.root.after(0, lambda: self.log(f"❌ ChatGPTテキスト処理エラー: {str(e)}"))
             return None
     
-    async def _process_text_with_claude(self, bypass_manager, text: str, model: str) -> Optional[str]:
+    async def _process_text_with_claude(self, browser_manager, text: str, model: str) -> Optional[str]:
         """Claudeでテキストを処理"""
         try:
-            page = await bypass_manager.create_page_with_stealth("claude_process", "https://claude.ai")
+            page = await browser_manager.create_page("claude_process", "https://claude.ai")
             
             if not page:
                 return None
@@ -987,10 +977,10 @@ class ImprovedMainWindow:
             self.root.after(0, lambda: self.log(f"❌ Claudeテキスト処理エラー: {str(e)}"))
             return None
     
-    async def _process_text_with_gemini(self, bypass_manager, text: str, model: str) -> Optional[str]:
+    async def _process_text_with_gemini(self, browser_manager, text: str, model: str) -> Optional[str]:
         """Geminiでテキストを処理"""
         try:
-            page = await bypass_manager.create_page_with_stealth("gemini_process", "https://gemini.google.com")
+            page = await browser_manager.create_page("gemini_process", "https://gemini.google.com")
             
             if not page:
                 return None
@@ -1032,10 +1022,10 @@ class ImprovedMainWindow:
             self.root.after(0, lambda: self.log(f"❌ Geminiテキスト処理エラー: {str(e)}"))
             return None
     
-    async def _process_text_with_genspark(self, bypass_manager, text: str, model: str) -> Optional[str]:
+    async def _process_text_with_genspark(self, browser_manager, text: str, model: str) -> Optional[str]:
         """Gensparkでテキストを処理"""
         try:
-            page = await bypass_manager.create_page_with_stealth("genspark_process", "https://www.genspark.ai")
+            page = await browser_manager.create_page("genspark_process", "https://www.genspark.ai")
             
             if not page:
                 return None
@@ -1073,10 +1063,10 @@ class ImprovedMainWindow:
             self.root.after(0, lambda: self.log(f"❌ Gensparkテキスト処理エラー: {str(e)}"))
             return None
     
-    async def _process_text_with_google_ai_studio(self, bypass_manager, text: str, model: str) -> Optional[str]:
+    async def _process_text_with_google_ai_studio(self, browser_manager, text: str, model: str) -> Optional[str]:
         """Google AI Studioでテキストを処理"""
         try:
-            page = await bypass_manager.create_page_with_stealth("google_ai_studio_process", "https://aistudio.google.com")
+            page = await browser_manager.create_page("google_ai_studio_process", "https://aistudio.google.com")
             
             if not page:
                 return None
