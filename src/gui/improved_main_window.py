@@ -224,12 +224,14 @@ class ImprovedMainWindow:
         log_frame = ttk.LabelFrame(self.main_frame, text="📝 実行ログ", padding="10")
         log_frame.pack(fill="both", expand=True)
         
-        # ログテキストエリア
+        # ログテキストエリア（編集不可）
         self.log_text = scrolledtext.ScrolledText(
             log_frame,
             height=15,
             width=100,
-            font=("Consolas", 10)
+            font=("Consolas", 10),
+            state="disabled",  # 編集不可にする
+            wrap="word"
         )
         self.log_text.pack(fill="both", expand=True)
         
@@ -462,15 +464,31 @@ class ImprovedMainWindow:
             async def run_real_test():
                 browser_manager = None
                 try:
+                    self.root.after(0, lambda: self.log(f"🔧 {ai_name}接続テスト開始 - 詳細ログ有効"))
+                    
+                    # Playwrightの確認
+                    try:
+                        from playwright.async_api import async_playwright
+                        self.root.after(0, lambda: self.log(f"✅ Playwrightインポート成功"))
+                    except ImportError as e:
+                        self.root.after(0, lambda: self.log(f"❌ Playwrightインポート失敗: {e}"))
+                        raise Exception(f"Playwrightが正しくインストールされていません: {e}")
+                    
                     # ブラウザマネージャーを初期化
+                    self.root.after(0, lambda: self.log(f"📋 BrowserManagerを初期化中..."))
                     browser_manager = BrowserManager()
+                    self.root.after(0, lambda: self.log(f"✅ BrowserManager初期化完了"))
+                    
                     self.root.after(0, lambda: self.log(f"🚀 {ai_name}ブラウザを起動中..."))
                     
                     # ブラウザを起動（ヘッドレスではなく実際に表示）
+                    self.root.after(0, lambda: self.log(f"🔧 Playwright起動パラメータ: headless=False, use_existing_profile=True"))
                     browser_started = await browser_manager.start_browser(
                         headless=False, 
                         use_existing_profile=True
                     )
+                    
+                    self.root.after(0, lambda: self.log(f"🔍 ブラウザ起動結果: {browser_started}"))
                     
                     if not browser_started:
                         raise Exception("ブラウザの起動に失敗しました")
@@ -506,7 +524,10 @@ class ImprovedMainWindow:
                     self.root.after(0, lambda: self.log(f"✅ {column_name}の{ai_name}接続テスト完了"))
                     
                 except Exception as e:
+                    import traceback
+                    error_details = traceback.format_exc()
                     self.root.after(0, lambda: self.log(f"❌ {column_name}の{ai_name}接続テスト失敗: {str(e)}"))
+                    self.root.after(0, lambda: self.log(f"🔍 詳細エラー: {error_details}"))
                     raise
                 finally:
                     # クリーンアップ
@@ -597,7 +618,9 @@ class ImprovedMainWindow:
     
     def _clear_log(self):
         """ログをクリア"""
+        self.log_text.config(state="normal")  # 一時的に編集可能にする
         self.log_text.delete(1.0, tk.END)
+        self.log_text.config(state="disabled")  # 再度編集不可にする
     
     def log(self, message):
         """ログにメッセージを追加"""
@@ -605,8 +628,11 @@ class ImprovedMainWindow:
         timestamp = datetime.now().strftime("%H:%M:%S")
         formatted_message = f"[{timestamp}] {message}\n"
         
+        # 一時的に編集可能にしてメッセージを追加
+        self.log_text.config(state="normal")
         self.log_text.insert(tk.END, formatted_message)
         self.log_text.see(tk.END)
+        self.log_text.config(state="disabled")  # 再度編集不可にする
         
         # コンソールにも出力
         print(formatted_message.strip())
