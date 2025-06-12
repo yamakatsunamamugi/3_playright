@@ -5,6 +5,7 @@ GUIテスト用スクリプト
 """
 
 import sys
+import os
 from pathlib import Path
 
 # プロジェクトルートをPythonパスに追加
@@ -15,12 +16,22 @@ def test_gui_launch():
     try:
         print("GUIアプリケーションを起動中...")
         
-        from src.gui.main_window import MainWindow
+        # 拡張版が存在する場合はそちらを使用
+        try:
+            from src.gui.main_window_enhanced import MainWindowEnhanced as MainWindow
+            print("✓ 拡張版メインウィンドウを使用")
+        except ImportError:
+            from src.gui.main_window import MainWindow
+            print("✓ 標準版メインウィンドウを使用")
+            
         from src.utils.logger import setup_logger
-        from config.settings import settings
         
         # ログ設定
-        setup_logger(settings.LOG_LEVEL, settings.LOG_FILE)
+        try:
+            from config.settings import settings
+            setup_logger(settings.LOG_LEVEL, settings.LOG_FILE)
+        except ImportError:
+            setup_logger("INFO", "logs/app.log")
         print("✓ ログ設定完了")
         
         # メインウィンドウ作成
@@ -31,13 +42,13 @@ def test_gui_launch():
         print("✓ GUI起動成功 - ウィンドウが表示されました")
         app.run()
         
+        return True
+        
     except Exception as e:
         print(f"❌ GUI起動エラー: {e}")
         import traceback
         traceback.print_exc()
         return False
-    
-    return True
 
 if __name__ == "__main__":
     print("=" * 50)

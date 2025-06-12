@@ -6,6 +6,8 @@
 - AI設定（モデル選択、API設定など）
 - スプレッドシート設定（URL、シート名など）
 - その他のユーザー設定
+
+JSON形式でファイルに永続化し、次回起動時に復元する機能を提供
 """
 
 import json
@@ -18,16 +20,17 @@ logger = get_logger(__name__)
 
 
 class ConfigManager:
-    """設定管理クラス"""
+    """アプリケーション設定の管理クラス"""
     
-    def __init__(self, config_file: str = "config.json"):
+    def __init__(self, config_file: str = "config/user_settings.json"):
         """
         ConfigManagerを初期化
         
         Args:
-            config_file: 設定ファイル名
+            config_file: 設定ファイルのパス
         """
         self.config_file = Path(config_file)
+        self.config_file.parent.mkdir(parents=True, exist_ok=True)
         self.config_data: Dict[str, Any] = {}
         self.load_config()
     
@@ -42,6 +45,10 @@ class ConfigManager:
             if self.config_file.exists():
                 with open(self.config_file, 'r', encoding='utf-8') as f:
                     self.config_data = json.load(f)
+                # デフォルト設定とマージ（新しい項目が追加された場合に対応）
+                default_config = self._get_default_config()
+                self._merge_config(default_config, self.config_data)
+                self.config_data = default_config
                 logger.info(f"設定ファイルを読み込みました: {self.config_file}")
             else:
                 # デフォルト設定で初期化
@@ -89,14 +96,15 @@ class ConfigManager:
                 "window_x": -1,  # -1は中央配置を意味
                 "window_y": -1,
                 "theme": "default",
-                "font_size": 10
+                "font_size": 10,
+                "log_lines": 100
             },
             "spreadsheet": {
                 "last_url": "",
                 "last_sheet": "",
                 "auto_load": False
             },
-            "ai_tools": {
+            "ai_settings": {
                 "ChatGPT": {
                     "enabled": False,
                     "model": "gpt-4o",
@@ -109,7 +117,7 @@ class ConfigManager:
                     "enabled": False,
                     "model": "claude-3-5-sonnet-20241022",
                     "settings": {
-                        "max_tokens": 2000
+                        "max_tokens": 4000
                     }
                 },
                 "Gemini": {
@@ -130,14 +138,15 @@ class ConfigManager:
                     "model": "gemini-2.0-flash-exp",
                     "settings": {
                         "temperature": 0.9,
-                        "max_output_tokens": 2048
+                        "max_output_tokens": 2048,
+                        "safety_settings": "moderate"
                     }
                 }
             },
             "processing": {
                 "retry_count": 5,
                 "retry_delay": 10,
-                "timeout": 120,
+                "timeout": 300,
                 "parallel_processing": False
             },
             "logging": {
@@ -167,15 +176,39 @@ class ConfigManager:
             self.config_data["spreadsheet"] = {}
         self.config_data["spreadsheet"].update(spreadsheet_config)
     
-    def get_ai_tools_config(self) -> Dict[str, Any]:
-        """AIツール設定を取得"""
-        return self.config_data.get("ai_tools", {})
+    def get_ai_config(self, ai_name: str) -> Dict[str, Any]:
+        """
+        特定のAIの設定を取得
+        
+        Args:
+            ai_name: AI名
+            
+        Returns:
+            AI設定辞書
+        """
+        return self.config_data.get("ai_settings", {}).get(ai_name, {})
     
-    def set_ai_tools_config(self, ai_tools_config: Dict[str, Any]):
-        """AIツール設定を設定"""
-        if "ai_tools" not in self.config_data:
-            self.config_data["ai_tools"] = {}
-        self.config_data["ai_tools"].update(ai_tools_config)
+    def set_ai_config(self, ai_name: str, config: Dict[str, Any]):
+        """
+        特定のAIの設定を保存
+        
+        Args:
+            ai_name: AI名
+            config: AI設定辞書
+        """
+        if "ai_settings" not in self.config_data:
+            self.config_data["ai_settings"] = {}
+        self.config_data["ai_settings"][ai_name] = config
+    
+    def get_ai_settings(self) -> Dict[str, Any]:
+        """AIツール設定を取得（互換性のため）"""
+        return self.config_data.get("ai_settings", {})
+    
+    def set_ai_settings(self, ai_settings: Dict[str, Any]):
+        """AIツール設定を設定（互換性のため）"""
+        if "ai_settings" not in self.config_data:
+            self.config_data["ai_settings"] = {}
+        self.config_data["ai_settings"].update(ai_settings)
     
     def get_processing_config(self) -> Dict[str, Any]:
         """処理設定を取得"""
@@ -227,6 +260,15 @@ class ConfigManager:
         
         # 最後のキーに値を設定
         data[keys[-1]] = value
+    
+    # エイリアスメソッド（互換性のため）
+    def get(self, key_path: str, default: Any = None) -> Any:
+        """get_configのエイリアス"""
+        return self.get_config(key_path, default)
+    
+    def set(self, key_path: str, value: Any):
+        """set_configのエイリアス"""
+        self.set_config(key_path, value)
     
     def reset_to_default(self):
         """設定をデフォルトにリセット"""
@@ -291,6 +333,13 @@ class ConfigManager:
                 self._merge_config(target[key], value)
             else:
                 target[key] = value
+    
+    def auto_save(self):
+        """設定を自動保存（エラーが発生しても継続）"""
+        try:
+            self.save_config()
+        except Exception as e:
+            logger.warning(f"設定の自動保存に失敗しました: {e}")
 
 
 # グローバルConfigManagerインスタンス
