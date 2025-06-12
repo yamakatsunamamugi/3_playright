@@ -36,8 +36,9 @@ def main():
             from src.gui.enhanced_main_window import EnhancedMainWindow
             app = EnhancedMainWindow()
         else:
-            from src.gui.main_window import MainWindow
-            app = MainWindow()
+            # 修正版メインウィンドウを使用
+            from fixed_main_window import FixedMainWindow
+            app = FixedMainWindow()
             
         print("✓ アプリケーション起動")
         
